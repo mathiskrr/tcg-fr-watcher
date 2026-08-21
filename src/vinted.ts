@@ -87,6 +87,40 @@ function sameCardNumber(a: CardNumber, b: CardNumber): boolean {
   return a.numerator === b.numerator && a.denominator === b.denominator;
 }
 
+// Type de produit scellé détectable dans une requête (displays, ETB, bundles...). Si la
+// requête cible un type précis, le titre DOIT afficher un marqueur du même type -> un simple
+// chevauchement de mots-clés ne suffit pas ("Carte promo ETB Nuit Noire ME05" contient "ETB"
+// mais n'est pas un ETB ; "Bundle Kit Avant Première ME05 Nuit Noire" partage "ME05 Nuit
+// Noire" avec une requête ETB sans être un ETB non plus). "demi-display" est vérifié avant
+// "display" : "display" seul matcherait aussi "demi-display" (le mot y est bien présent).
+interface ProductTypeMarker {
+  queryPattern: RegExp;
+  titlePattern: RegExp;
+}
+
+// titlePattern est testé sur le titre normalisé (normalizeForMatch : accents/casse
+// neutralisés) pour rester robuste aux variantes ("Coffret Dresseur d'Élite" / "coffret
+// dresseur elite" / etc.) sans avoir à énumérer toutes les combinaisons d'accents.
+const PRODUCT_TYPE_MARKERS: ProductTypeMarker[] = [
+  { queryPattern: /\bdemi[\s-]?display\b/i, titlePattern: /\bdemi[\s-]?display\b/ },
+  { queryPattern: /\bdisplay\b/i, titlePattern: /\bdisplay\b/ },
+  { queryPattern: /\betb\b/i, titlePattern: /\betb\b|\bcoffret\b[\s\S]*\bdresseur\b|\bdresseur\b[\s\S]*\bcoffret\b/ },
+  { queryPattern: /\bbundle\b/i, titlePattern: /\bbundle\b/ },
+  { queryPattern: /tri[\s-]?pack/i, titlePattern: /tri[\s-]?pack/ },
+  { queryPattern: /\bboosters?\b/i, titlePattern: /\bboosters?\b/ },
+];
+
+function findProductTypeMarker(query: string): ProductTypeMarker | null {
+  return PRODUCT_TYPE_MARKERS.find((marker) => marker.queryPattern.test(query)) ?? null;
+}
+
+// Une annonce de carte à l'unité mentionnant un produit scellé en passant ("Carte promo ETB
+// Nuit Noire ME05") contient bien le mot-clé du type de produit -> titlePattern seul ne
+// suffit pas à l'écarter. En pratique, sur Vinted, un vendeur qui liste une carte à l'unité
+// commence quasi systématiquement le titre par "Carte(s)", alors qu'une annonce de produit
+// scellé commence par le nom du produit (Display/ETB/Coffret/Bundle/Tripack/Booster...).
+const SINGLE_CARD_PREFIX_PATTERN = /^\s*cartes?\b/i;
+
 // Un titre est jugé pertinent s'il contient au moins la moitié (arrondi au-dessus) des mots
 // significatifs de la requête. Évite de rejeter sur un seul mot manquant (accord, abréviation
 // différente) tout en filtrant le contenu générique renvoyé par le fallback de Vinted.
@@ -102,14 +136,25 @@ function sameCardNumber(a: CardNumber, b: CardNumber): boolean {
 // ne permet pas de savoir laquelle c'est réellement. En pratique ces titres génériques sont
 // souvent bien moins chers (mauvaise carte, valeur différente) et, sans ce rejet, ils
 // polluent le classement "moins cher" au détriment des vraies annonces de la bonne variante.
-// Le filtre mots-clés ne s'applique donc que lorsque la requête elle-même n'a pas de numéro
-// (displays, ETB, bundles...), où il n'y a de toute façon rien à vérifier plus précisément.
+//
+// Sinon, si la requête cible un type de produit scellé (display, ETB, bundle...), le titre
+// doit afficher le marqueur de ce type précis -> voir PRODUCT_TYPE_MARKERS ci-dessus.
+//
+// Le filtre mots-clés seul ne s'applique donc que pour le reste (aucun numéro, aucun type de
+// produit détecté dans la requête).
 export function isRelevantToQuery(title: string, query: string): boolean {
   const queryCardNumber = extractCardNumber(query);
   if (queryCardNumber !== null) {
     const titleCardNumber = extractCardNumber(title);
     if (titleCardNumber === null) return false;
     return sameCardNumber(queryCardNumber, titleCardNumber);
+  }
+
+  const productType = findProductTypeMarker(query);
+  if (productType !== null) {
+    if (SINGLE_CARD_PREFIX_PATTERN.test(title) || !productType.titlePattern.test(normalizeForMatch(title))) {
+      return false;
+    }
   }
 
   const words = significantQueryWords(query);

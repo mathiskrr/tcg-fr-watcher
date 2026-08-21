@@ -70,5 +70,35 @@
     "query": "Mega Darkrai ex 120/084 Nuit Noire gold",
     "expected": false,
     "note": "numero different (048 vs 120) -> rejete meme si Mega/Darkrai/ex se chevauchent"
+  },
+  {
+    "title": "Carte promo ETB nuit noire ME05",
+    "query": "ETB Nuit Noire ME05",
+    "expected": false,
+    "note": "cas reel remonte : contient 'ETB' mais c'est une carte a l'unite, pas un ETB scelle"
+  },
+  {
+    "title": "Bundle Kit Avant Première ME05 Nuit Noire",
+    "query": "ETB Nuit Noire ME05",
+    "expected": false,
+    "note": "cas reel remonte : chevauchement de mots-cles (ME05 Nuit Noire) sans etre un ETB"
+  },
+  {
+    "title": "Coffret Dresseur d'Elite Nuit Noire ME05 scellé",
+    "query": "ETB Nuit Noire ME05",
+    "expected": true,
+    "note": "vrai ETB designe par son nom francais (coffret dresseur d'elite)"
+  },
+  {
+    "title": "ETB Nuit Noire ME05 neuf sous blister",
+    "query": "ETB Nuit Noire ME05",
+    "expected": true,
+    "note": "vrai ETB, marqueur de type present"
+  },
+  {
+    "title": "Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR",
+    "query": "ETB Nuit Noire ME05",
+    "expected": false,
+    "note": "type de produit different (display, pas ETB) malgre le fort chevauchement de mots-cles"
   }
 ]

@@ -7,5 +7,11 @@
   { "title": "Mew ex 205 Japanese Pokemon Card", "expected": false, "note": "japanese explicite -> rejeté même en assume-french" },
   { "title": "Glurak Karte Deutsch PSA 10", "expected": false, "note": "deutsch explicite -> rejeté même en assume-french" },
   { "title": "Carta Charizard ex Italiano", "expected": false, "note": "italiano explicite -> rejeté même en assume-french" },
-  { "title": "Carta Pokemon Español Charizard rara", "expected": false, "note": "español explicite -> rejeté même en assume-french" }
+  { "title": "Carta Pokemon Español Charizard rara", "expected": false, "note": "español explicite -> rejeté même en assume-french" },
+  { "title": "Charkos EN 🇬🇧", "expected": false, "note": "abréviation EN majuscule isolée + drapeau UK -> rejeté même en assume-french" },
+  { "title": "Charkos ENG", "expected": false, "note": "abréviation ENG isolée -> rejeté même en assume-french" },
+  { "title": "Charkos GB", "expected": false, "note": "abréviation GB isolée -> rejeté même en assume-french" },
+  { "title": "Charkos UK", "expected": false, "note": "abréviation UK isolée -> rejeté même en assume-french" },
+  { "title": "Charkos 🇯🇵", "expected": false, "note": "drapeau JP seul -> rejeté même en assume-french" },
+  { "title": "Carte en parfait état, jamais jouée", "expected": true, "note": "'en' minuscule = préposition française -> ne doit pas être pris pour l'abréviation EN (aucun autre indice nécessaire en assume-french)" }
 ]

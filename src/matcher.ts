@@ -15,6 +15,18 @@ export type LanguageFilterMode = "strict" | "assume-french";
 const FOREIGN_LANGUAGE_PATTERN =
   /\b(english|en anglais|jap(an|on)?ese?|japon(ais)?e?|jp\b|korean|coréen|german|allemand|deutsch|italian|italien(ne)?|italiano|spanish|espagnol|español|chinese|chinois|dutch|néerlandais|portuguese|portugais)\b/i;
 
+// Abréviations de langue isolées (tags de marketplace, ex: "Charkos EN 🇬🇧").
+// "ENG"/"GB"/"UK" n'ont pas d'équivalent courant en français -> vérifiées insensibles à
+// la casse. "EN" est en revanche une préposition française extrêmement courante ("carte
+// EN parfait état") en minuscules -> on ne la traite comme tag de langue que si elle
+// apparaît en MAJUSCULES isolées (comparaison sensible à la casse), ce qui correspond à
+// l'usage réel des tags de langue sur les marketplaces.
+const FOREIGN_LANGUAGE_ABBREVIATION_PATTERN = /\b(ENG|GB|UK)\b/i;
+const ENGLISH_UPPERCASE_TAG_PATTERN = /\bEN\b/;
+
+// Drapeaux emoji de pays non-francophones -> indicateur fort de langue étrangère.
+const FOREIGN_FLAG_EMOJI_PATTERN = /🇬🇧|🇺🇸|🇯🇵|🇩🇪|🇮🇹|🇪🇸/u;
+
 // Mots-clés qui indiquent explicitement une carte française.
 const FRENCH_LANGUAGE_PATTERN =
   /\b(vf\b|version fran[çc]aise|carte fran[çc]aise|en fran[çc]ais|fr\b|français(e)?|francaise?)\b/i;
@@ -30,8 +42,13 @@ export interface LanguageCheckResult {
 export function isFrenchTitle(title: string, mode: LanguageFilterMode = "strict"): LanguageCheckResult {
   const normalized = title.normalize("NFC");
 
-  if (FOREIGN_LANGUAGE_PATTERN.test(normalized)) {
-    return { isFrench: false, reason: "mot-clé langue étrangère détecté" };
+  if (
+    FOREIGN_LANGUAGE_PATTERN.test(normalized) ||
+    FOREIGN_LANGUAGE_ABBREVIATION_PATTERN.test(normalized) ||
+    ENGLISH_UPPERCASE_TAG_PATTERN.test(normalized) ||
+    FOREIGN_FLAG_EMOJI_PATTERN.test(normalized)
+  ) {
+    return { isFrench: false, reason: "mot-clé/abréviation/drapeau langue étrangère détecté" };
   }
 
   if (FRENCH_LANGUAGE_PATTERN.test(normalized)) {
@@ -51,4 +68,14 @@ export function isFrenchTitle(title: string, mode: LanguageFilterMode = "strict"
 
   // Aucun indice de langue -> on rejette par défaut (mieux vaut rater que spammer une carte EN).
   return { isFrench: false, reason: "aucun indice de langue française dans le titre" };
+}
+
+// Filtre "produit scellé" : rejette une annonce dont le titre indique explicitement que le
+// produit a été ouvert ou est incomplet (ex: un display/ETB/booster vendu ouvert pour en
+// sortir les cartes à l'unité). Ne s'applique qu'aux entrées watchlist identifiées comme
+// scellées par leur nom (Display, ETB, Bundle, Tripack, Booster...) — voir scheduler.ts.
+const OPENED_PRODUCT_PATTERN = /\b(ouverte?s?|open(ed)?|incomplet(e)?s?)\b/i;
+
+export function isSealed(title: string): boolean {
+  return !OPENED_PRODUCT_PATTERN.test(title.normalize("NFC"));
 }

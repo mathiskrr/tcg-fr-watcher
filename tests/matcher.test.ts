@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { isFrenchTitle } from "../src/matcher.js";
+import { isFrenchTitle, isSealed } from "../src/matcher.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -61,4 +61,36 @@ test("isFrenchTitle - une langue étrangère explicite reste rejetée quel que s
 
   assert.equal(isFrenchTitle(foreignTitle, "strict").isFrench, false);
   assert.equal(isFrenchTitle(foreignTitle, "assume-french").isFrench, false);
+});
+
+test("isFrenchTitle - abréviations de langue isolées (EN/ENG/GB/UK) et drapeaux emoji", () => {
+  assert.equal(isFrenchTitle("Charkos EN 🇬🇧").isFrench, false, "cas réel remonté");
+  assert.equal(isFrenchTitle("Charkos ENG").isFrench, false);
+  assert.equal(isFrenchTitle("Charkos GB").isFrench, false);
+  assert.equal(isFrenchTitle("Charkos UK").isFrench, false);
+  assert.equal(isFrenchTitle("Charkos 🇺🇸").isFrench, false);
+  assert.equal(isFrenchTitle("Charkos 🇯🇵").isFrench, false);
+  assert.equal(isFrenchTitle("Charkos 🇩🇪").isFrench, false);
+  assert.equal(isFrenchTitle("Charkos 🇮🇹").isFrench, false);
+  assert.equal(isFrenchTitle("Charkos 🇪🇸").isFrench, false);
+});
+
+test("isFrenchTitle - 'en' minuscule (préposition française) n'est pas pris pour l'abréviation EN", () => {
+  // Sensible à la casse : seul "EN" en majuscules isolées est traité comme un tag de langue.
+  // Mode assume-french : aucun mot-clé FR nécessaire, donc si "en" déclenchait à tort le
+  // rejet "langue étrangère", ce titre passerait de true à false.
+  assert.equal(isFrenchTitle("Carte en parfait état, jamais jouée", "assume-french").isFrench, true);
+  assert.equal(isFrenchTitle("Neuf en boite scellée sans autre indice", "assume-french").isFrench, true);
+});
+
+test("isSealed - rejette les produits indiqués comme ouverts ou incomplets", () => {
+  assert.equal(isSealed("Etb ME05 Fr Nuit Noire Ouverte"), false, "cas réel remonté");
+  assert.equal(isSealed("Display Nuit Noire ouvert pour cartes"), false);
+  assert.equal(isSealed("Bundle incomplet, il manque 2 boosters"), false);
+  assert.equal(isSealed("ETB open box"), false);
+});
+
+test("isSealed - accepte les produits scellés (aucune mention d'ouverture)", () => {
+  assert.equal(isSealed("ETB Nuit Noire ME05 scellé neuf"), true);
+  assert.equal(isSealed("Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR"), true);
 });

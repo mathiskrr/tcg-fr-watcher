@@ -11,5 +11,11 @@
   { "title": "Carta Charizard ex Italiano", "expected": false, "note": "italiano explicite" },
   { "title": "Carta Pokemon Español Charizard rara", "expected": false, "note": "español explicite" },
   { "title": "Pokemon card no language info at all", "expected": false, "note": "aucun indice -> rejet par defaut" },
-  { "title": "Charizard ex 199 korean version PSA 9", "expected": false, "note": "korean explicite" }
+  { "title": "Charizard ex 199 korean version PSA 9", "expected": false, "note": "korean explicite" },
+  { "title": "Charkos EN 🇬🇧", "expected": false, "note": "abréviation EN majuscule isolée + drapeau UK" },
+  { "title": "Charkos ENG PSA 10", "expected": false, "note": "abréviation ENG isolée" },
+  { "title": "Charkos GB near mint", "expected": false, "note": "abréviation GB isolée" },
+  { "title": "Charkos UK version", "expected": false, "note": "abréviation UK isolée" },
+  { "title": "Charkos 🇺🇸", "expected": false, "note": "drapeau US seul" },
+  { "title": "Carte Pokémon en français, jamais jouée VF", "expected": true, "note": "'en' minuscule (préposition FR) ne doit pas être pris pour l'abréviation EN — VF/en français confirment le FR" }
 ]

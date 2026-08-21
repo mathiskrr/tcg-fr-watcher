@@ -3,7 +3,7 @@ import cron from "node-cron";
 import { config } from "./config.js";
 import { searchEbay } from "./ebay.js";
 import { searchVinted } from "./vinted.js";
-import { isFrenchTitle, type LanguageFilterMode } from "./matcher.js";
+import { isFrenchTitle, isSealed, type LanguageFilterMode } from "./matcher.js";
 import { hasSeenItem, markItemSeen } from "./db.js";
 import { sendNewListingAlert } from "./discord.js";
 import type { MarketplaceItem } from "./types.js";
@@ -61,13 +61,33 @@ export function selectCheapestN(items: Candidate[], n: number): Candidate[] {
   return [...items].sort((a, b) => a.item.price - b.item.price).slice(0, n);
 }
 
-// Filtre langue sur TOUS les résultats d'une source pour un cycle (pas de dédup ici :
-// le top N doit se recalculer à chaque cycle sur tous les résultats, vus ou non).
-function filterFrenchMatches(source: string, mode: LanguageFilterMode, items: MarketplaceItem[]): Candidate[] {
+// Entrées watchlist représentant un produit scellé (par opposition à une carte à l'unité) :
+// identifiables par leur nom. "display" matche aussi "demi-display" (le mot y est présent).
+const SEALED_PRODUCT_NAME_PATTERN = /\b(display|etb|bundle|tripack|booster)\b/i;
+
+export function isSealedProductEntry(entryName: string): boolean {
+  return SEALED_PRODUCT_NAME_PATTERN.test(entryName);
+}
+
+// Filtre langue (+ produit scellé le cas échéant) sur TOUS les résultats d'une source pour
+// un cycle (pas de dédup ici : le top N doit se recalculer à chaque cycle sur tous les
+// résultats, vus ou non).
+function filterFrenchMatches(
+  source: string,
+  mode: LanguageFilterMode,
+  items: MarketplaceItem[],
+  entryName: string
+): Candidate[] {
+  const requireSealed = isSealedProductEntry(entryName);
   const matches: Candidate[] = [];
+
   for (const item of items) {
     const { isFrench, reason } = isFrenchTitle(item.title, mode);
     if (!isFrench) continue;
+
+    // Pour une entrée "produit scellé" (Display, ETB, Bundle, Tripack, Booster...), une
+    // annonce indiquant explicitement que le produit est ouvert/incomplet est écartée.
+    if (requireSealed && !isSealed(item.title)) continue;
 
     // Les itemId sont propres à chaque marketplace : on les préfixe par source pour
     // éviter qu'un id Vinted et un id eBay identiques ne se marquent l'un l'autre "vu".
@@ -112,8 +132,8 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
   // donc l'absence d'indice reste suspecte (mode "strict"). Vinted est déjà 100%
   // francophone par défaut : un titre sans indice de langue y est la norme, pas une
   // anomalie (mode "assume-french") — voir matcher.ts pour le détail des deux modes.
-  const ebayMatches = filterFrenchMatches("ebay", "strict", ebayItems);
-  const vintedMatches = filterFrenchMatches("vinted", "assume-french", vintedItems);
+  const ebayMatches = filterFrenchMatches("ebay", "strict", ebayItems, entry.name);
+  const vintedMatches = filterFrenchMatches("vinted", "assume-french", vintedItems, entry.name);
 
   // Classement et alertes indépendants par source (voir commentaire sur TOP_N_PER_ENTRY).
   await alertCheapestForSource(entry.name, "ebay", ebayMatches);

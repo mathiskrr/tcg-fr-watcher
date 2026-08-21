@@ -156,15 +156,53 @@ test("isRelevantToQuery - cas réel diagnostiqué : titre générique sans numé
   );
 });
 
-test("isRelevantToQuery - requête SANS numéro de carte (displays, ETB, bundles...) garde le filtre mots-clés habituel", () => {
-  // Pas de numéro dans la requête -> rien à vérifier de plus précis, le comportement
-  // mots-clés existant s'applique normalement (annonce réelle pertinente).
+test("isRelevantToQuery - requête sans numéro NI type de produit détecté garde le filtre mots-clés habituel", () => {
+  // Ni numéro ni type de produit reconnu dans la requête -> rien de plus précis à vérifier,
+  // le comportement mots-clés existant s'applique normalement (annonce réelle pertinente).
   assert.equal(
     isRelevantToQuery(
-      "Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR",
-      "display Nuit Noire ME05 36 boosters"
+      "Carte Pokémon Combat Final de Gladio ar sar alt pbl 118/084 nuit noir français fr",
+      "Gladio SAR Nuit Noire"
     ),
     true
+  );
+});
+
+test("isRelevantToQuery - cas réel diagnostiqué : le type de produit exact est exigé pour une entrée scellée (ETB)", () => {
+  // Constaté en prod pour l'entrée "ETB Nuit Noire" : des annonces contenant "ETB" ou
+  // partageant des mots-clés (ME05, Nuit Noire) sans être réellement un ETB scellé
+  // remontaient dans le top 3 à la place des vrais ETB.
+  const etbQuery = "ETB Nuit Noire ME05";
+
+  // "Carte promo ETB..." contient bien le mot ETB mais décrit une carte à l'unité, pas le
+  // coffret -> le préfixe "carte(s)" est un signal fort qu'il ne s'agit pas du produit scellé.
+  assert.equal(isRelevantToQuery("Carte promo ETB nuit noire ME05", etbQuery), false);
+
+  // Chevauchement de mots-clés (ME05, Nuit Noire) sans aucun marqueur de type ETB.
+  assert.equal(isRelevantToQuery("Bundle Kit Avant Première ME05 Nuit Noire", etbQuery), false);
+
+  // Mauvais type de produit malgré un fort chevauchement de mots-clés.
+  assert.equal(
+    isRelevantToQuery("Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR", etbQuery),
+    false
+  );
+
+  // Vrais ETB : marqueur "ETB" ou son nom français "coffret dresseur d'élite".
+  assert.equal(isRelevantToQuery("ETB Nuit Noire ME05 neuf sous blister", etbQuery), true);
+  assert.equal(isRelevantToQuery("Coffret Dresseur d'Elite Nuit Noire ME05 scellé", etbQuery), true);
+});
+
+test("isRelevantToQuery - le marqueur de type de produit ignore l'ordre demi-display/display", () => {
+  // "display" seul matcherait aussi "demi-display" (le mot y figure) -> demi-display est
+  // vérifié en priorité pour éviter qu'une recherche "display" (36 boosters) n'accepte une
+  // annonce "demi-display" (18 boosters), et vice-versa.
+  assert.equal(
+    isRelevantToQuery("Demi-display Pokémon Nuit Noire ME05 – 18 boosters FR", "demi display Nuit Noire ME05 18 boosters"),
+    true
+  );
+  assert.equal(
+    isRelevantToQuery("Display Pokémon Nuit Noire ME05 – 36 boosters FR", "demi display Nuit Noire ME05 18 boosters"),
+    false
   );
 });
 
