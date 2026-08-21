@@ -123,15 +123,46 @@ test("isRelevantToQuery - fixtures issues d'observations réelles (Vinted ne ren
   }
 });
 
-test("isRelevantToQuery - un titre sans numéro de carte retombe sur le filtre mots-clés habituel", () => {
-  // Le titre ne contient aucun numéro NNN/DDD : impossible de vérifier une correspondance
-  // exacte, donc on ne rejette pas systématiquement juste parce que la requête en a un —
-  // le filtre mots-clés existant tranche normalement (ici largement satisfait : 4 mots
-  // significatifs sur 6 matchent, seuil à 3).
+test("isRelevantToQuery - la requête a un numéro mais le titre n'en a aucun -> rejeté (pas de fallback mots-clés)", () => {
+  // Sans numéro dans le titre, impossible de savoir de quelle variante il s'agit (base, AR,
+  // SIR, gold...) : on rejette par défaut plutôt que d'accepter à l'aveugle via le filtre
+  // mots-clés, même avec un fort chevauchement ("floramantis", "ex", "nuit", "noire").
   assert.equal(
     isRelevantToQuery(
       "Floramantis ex Nuit Noire ME05 carte française scellée",
       "Floramantis ex 096/084 Nuit Noire ME05"
+    ),
+    false
+  );
+});
+
+test("isRelevantToQuery - cas réel diagnostiqué : titre générique sans numéro pollue le classement d'une variante précise", () => {
+  // Constaté en prod : pour la requête "Mega Darkrai ex 116/084 Nuit Noire" (carte SIR),
+  // ce titre générique (sans aucun numéro, en réalité probablement la carte 048) passait
+  // via le fallback mots-clés et, étant bien moins cher, écrasait le top 3 au détriment des
+  // vraies annonces 116/084 -> aucune alerte n'était jamais envoyée pour cette variante.
+  assert.equal(
+    isRelevantToQuery("PBL 048 - Mega Darkrai ex Nuit Noire (ME05) • FR", "Mega Darkrai ex 116/084 Nuit Noire"),
+    false
+  );
+  assert.equal(
+    isRelevantToQuery("Méga-Darkrai ex Nuit noire", "Mega Darkrai ex 116/084 Nuit Noire"),
+    false
+  );
+  // Le vrai 116/084, lui, doit toujours passer.
+  assert.equal(
+    isRelevantToQuery("Pokémon Méga-Darkrai ex SIR 116/084  Nuit Noire", "Mega Darkrai ex 116/084 Nuit Noire"),
+    true
+  );
+});
+
+test("isRelevantToQuery - requête SANS numéro de carte (displays, ETB, bundles...) garde le filtre mots-clés habituel", () => {
+  // Pas de numéro dans la requête -> rien à vérifier de plus précis, le comportement
+  // mots-clés existant s'applique normalement (annonce réelle pertinente).
+  assert.equal(
+    isRelevantToQuery(
+      "Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR",
+      "display Nuit Noire ME05 36 boosters"
     ),
     true
   );

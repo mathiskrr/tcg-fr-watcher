@@ -94,16 +94,22 @@ function sameCardNumber(a: CardNumber, b: CardNumber): boolean {
 // Cas particulier : si la requête précise un numéro de carte (ex: "096/084"), un titre qui
 // affiche lui aussi un numéro DOIT correspondre exactement -> un simple chevauchement de
 // mots-clés ne suffit pas ("Floramantis ex 004/084" ne doit pas matcher une recherche pour
-// "Floramantis ex 096/084", même si "Floramantis" et "ex" sont présents dans les deux). Un
-// titre sans numéro du tout retombe sur le filtre mots-clés habituel (pas assez d'info pour
-// trancher autrement).
+// "Floramantis ex 096/084", même si "Floramantis" et "ex" sont présents dans les deux).
+//
+// Un titre SANS AUCUN numéro alors que la requête en précise un est REJETÉ, pas laissé
+// passer via le filtre mots-clés : pour un Pokémon avec plusieurs versions/raretés dans le
+// même set (ex, AR, SIR, gold...), un titre générique du type "Mega Darkrai Ex Nuit Noire"
+// ne permet pas de savoir laquelle c'est réellement. En pratique ces titres génériques sont
+// souvent bien moins chers (mauvaise carte, valeur différente) et, sans ce rejet, ils
+// polluent le classement "moins cher" au détriment des vraies annonces de la bonne variante.
+// Le filtre mots-clés ne s'applique donc que lorsque la requête elle-même n'a pas de numéro
+// (displays, ETB, bundles...), où il n'y a de toute façon rien à vérifier plus précisément.
 export function isRelevantToQuery(title: string, query: string): boolean {
   const queryCardNumber = extractCardNumber(query);
   if (queryCardNumber !== null) {
     const titleCardNumber = extractCardNumber(title);
-    if (titleCardNumber !== null) {
-      return sameCardNumber(queryCardNumber, titleCardNumber);
-    }
+    if (titleCardNumber === null) return false;
+    return sameCardNumber(queryCardNumber, titleCardNumber);
   }
 
   const words = significantQueryWords(query);
