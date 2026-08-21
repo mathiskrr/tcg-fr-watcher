@@ -90,6 +90,13 @@ test("isSealed - rejette les produits indiqués comme ouverts ou incomplets", ()
   assert.equal(isSealed("ETB open box"), false);
 });
 
+test("isSealed - rejette les produits reconditionnés ou d'occasion", () => {
+  assert.equal(isSealed("Bundle reconditionné nuit noire PBL me05"), false, "cas réel remonté");
+  assert.equal(isSealed("ETB reconditionnée nuit noire"), false, "accord féminin");
+  assert.equal(isSealed("Displays reconditionnés nuit noire"), false, "accord pluriel");
+  assert.equal(isSealed("Booster occasion nuit noire"), false);
+});
+
 test("isSealed - accepte les produits scellés (aucune mention d'ouverture)", () => {
   assert.equal(isSealed("ETB Nuit Noire ME05 scellé neuf"), true);
   assert.equal(isSealed("Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR"), true);
