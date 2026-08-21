@@ -47,10 +47,12 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
     return;
   }
 
-  const ebayItems = await fetchSourceItems("eBay", entry.name, () => searchEbay(entry.ebayQuery));
-  const vintedItems = await fetchSourceItems("Vinted", entry.name, () =>
-    searchVinted(entry.vintedQuery ?? entry.ebayQuery)
-  );
+  const ebayItems = config.enabledSources.includes("ebay")
+    ? await fetchSourceItems("eBay", entry.name, () => searchEbay(entry.ebayQuery))
+    : [];
+  const vintedItems = config.enabledSources.includes("vinted")
+    ? await fetchSourceItems("Vinted", entry.name, () => searchVinted(entry.vintedQuery ?? entry.ebayQuery))
+    : [];
 
   const sourcedItems: Array<{ source: string; item: MarketplaceItem }> = [
     ...ebayItems.map((item) => ({ source: "ebay", item })),
@@ -92,7 +94,9 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
 
 export async function runCheck(): Promise<void> {
   const watchlist = loadWatchlist();
-  console.log(`[scheduler] cycle de vérification démarré (${watchlist.length} entrées)`);
+  console.log(
+    `[scheduler] cycle de vérification démarré (${watchlist.length} entrées, sources: ${config.enabledSources.join(", ")})`
+  );
 
   for (const entry of watchlist) {
     try {
