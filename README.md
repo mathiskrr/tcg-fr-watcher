@@ -51,16 +51,28 @@ Le bot utilise le flux OAuth2 *Client Credentials* (application, sans utilisateu
 appeler la [Browse API](https://developer.ebay.com/api-docs/buy/browse/overview.html) — voir
 `src/ebay.ts`.
 
-### 2. Vinted
+### 2. Vinted (cookie de session)
 
-Aucune clé à configurer : `src/vinted.ts` appelle l'endpoint interne utilisé par le site web
-(`/api/v2/catalog/items`), pas une API officielle documentée. **Limitation connue** : cet
-endpoint peut exiger un token de session/anonyme (observé en pratique : `HTTP 401 invalid_authentication_token`
-même avec des en-têtes navigateur réalistes). Le bot gère ce cas proprement (log clair, entrée
-ignorée pour le cycle, pas de crash), mais obtenir des résultats fiables peut nécessiter de
-récupérer d'abord ce jeton (ex: cookie posé lors d'une visite classique du site) — non implémenté
-en V2 pour rester simple. À ajuster dans `src/vinted.ts` si besoin (voir `COLLECTIBLE_CARDS_CATALOG_ID`
-et `BROWSER_HEADERS`).
+`src/vinted.ts` appelle l'endpoint interne utilisé par le site web (`/api/v2/catalog/items`),
+pas une API officielle documentée. En pratique, cet endpoint répond `HTTP 401
+invalid_authentication_token` sans cookie de session valide, même avec des en-têtes navigateur
+réalistes — il faut donc fournir manuellement le cookie `access_token_web` :
+
+1. Connecte-toi sur [vinted.fr](https://www.vinted.fr/).
+2. Ouvre les DevTools du navigateur (F12) > onglet **Application** (Chrome) ou **Stockage** (Firefox)
+   > **Cookies** > `https://www.vinted.fr`.
+3. Copie la valeur du cookie `access_token_web`.
+4. Colle-la dans `.env` :
+   ```
+   VINTED_ACCESS_TOKEN_WEB=eyJhbGciOi...
+   ```
+
+C'est un JWT de courte durée (quelques heures). Le bot **décode sa date d'expiration** et logge
+un avertissement clair (`console.warn`) dès qu'il la dépasse, sans attendre une erreur — et si
+Vinted répond quand même `401` (session invalidée pour une autre raison), un message tout aussi
+clair (`console.error`) explique comment le renouveler. Dans les deux cas, l'entrée concernée est
+simplement ignorée pour le cycle en cours (pas de crash). Sans cookie configuré du tout, le bot
+continue de tourner mais les requêtes Vinted échoueront très probablement en 401.
 
 ### 3. Créer un webhook Discord
 
@@ -118,6 +130,7 @@ relais selon `CRON_SCHEDULE` (par défaut `*/10 * * * *`, toutes les 10 minutes)
 | `CRON_SCHEDULE`         | non         | `*/10 * * * *`              | Expression cron du polling                      |
 | `DB_PATH`               | non         | `./data/watcher.sqlite`     | Chemin du fichier SQLite                         |
 | `WATCHLIST_PATH`        | non         | `./watchlist.json`          | Chemin du fichier watchlist                      |
+| `VINTED_ACCESS_TOKEN_WEB` | non       | —                           | Cookie de session Vinted (JWT), voir section "Vinted" |
 
 ## Architecture
 
@@ -148,8 +161,11 @@ tests/
 directement. Le token OAuth eBay étant mis en cache au niveau du module `ebay.ts`, les 4 tests
 du fichier s'exécutent dans un ordre précis (échec OAuth → succès + mise en cache → réutilisation
 du cache → expiration simulée et renouvellement) — voir le commentaire en tête du fichier.
-`vinted.test.ts` vérifie en plus que le retry sur 403/429 déclenche bien un log `console.warn`
-explicite, et qu'une erreur 5xx transitoire n'empêche pas un retry réussi ensuite.
+`vinted.test.ts` vérifie en plus : le retry sur 403/429 avec log `console.warn` explicite, la
+récupération après une erreur 5xx transitoire, l'envoi du cookie `access_token_web` quand il est
+configuré, l'avertissement proactif quand ce cookie est déjà expiré (JWT décodé), et le log clair
+quand Vinted répond `401` (session invalide) — le tout via `searchVinted(..., accessTokenWeb)`
+qui accepte le token en paramètre explicite pour rester testable sans dépendre de `config.ts`.
 
 Tests écrits avec le test runner intégré à Node (`node:test` + `node:assert`), pas de dépendance
 supplémentaire. `npm test` les lance via `tsx --test`.
@@ -161,10 +177,11 @@ supplémentaire. `npm test` les lance via `tsx --test`.
 - Le prix de référence Cardmarket est obtenu par scraping léger, pas via l'API officielle
   (accès restreint aux marchands partenaires) — privilégier `referencePrice` fixe si le scraping
   est bloqué.
-- L'endpoint interne Vinted peut renvoyer `401 invalid_authentication_token` selon le trafic :
-  contrairement à eBay (API officielle) ou Cardmarket (page produit publique), Vinted semble
-  exiger un jeton de session que de simples en-têtes navigateur ne suffisent pas à fournir. Voir
-  la section "Vinted" ci-dessus.
+- Le cookie `access_token_web` de Vinted est configuré manuellement et expire au bout de
+  quelques heures : sans renouvellement régulier, les requêtes Vinted finissent par échouer
+  en 401 (détecté et loggé clairement, voir section "Vinted" ci-dessus, mais pas de renouvellement
+  automatique — cela nécessiterait de gérer un `refresh_token_web` et un flux de refresh, hors
+  scope volontairement pour rester simple).
 - Les `itemId` sont propres à chaque marketplace et ne sont donc pas garantis uniques entre eBay
   et Vinted : `scheduler.ts` préfixe la clé de dédup par source (`ebay:...` / `vinted:...`) dans
   `seen_items` pour éviter toute collision.

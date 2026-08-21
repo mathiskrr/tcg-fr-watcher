@@ -16,6 +16,10 @@ export const config = {
   cronSchedule: process.env.CRON_SCHEDULE ?? "*/10 * * * *",
   dbPath: process.env.DB_PATH ?? "./data/watcher.sqlite",
   watchlistPath: process.env.WATCHLIST_PATH ?? "./watchlist.json",
+  // Cookie de session Vinted (JWT), à récupérer manuellement (pas d'API officielle) :
+  // connecté sur vinted.fr, DevTools > Application/Storage > Cookies > "access_token_web".
+  // Optionnel : sans lui, les requêtes Vinted échouent généralement en 401 (voir vinted.ts).
+  vintedAccessTokenWeb: process.env.VINTED_ACCESS_TOKEN_WEB || null,
 };
 
 export type Config = typeof config;

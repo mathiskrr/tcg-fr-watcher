@@ -1,15 +1,25 @@
+import "./env.js"; // doit rester le premier import : peuple process.env avant que src/config.ts ne se charge
+
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { searchVinted, COLLECTIBLE_CARDS_CATALOG_ID } from "../src/vinted.js";
+import { searchVinted, decodeJwtExpiry, COLLECTIBLE_CARDS_CATALOG_ID } from "../src/vinted.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const searchFixture = JSON.parse(
   readFileSync(join(__dirname, "fixtures/vinted-search-response.json"), "utf-8")
 );
+
+// Construit un faux JWT (header.payload.signature, non signé) juste pour exercer le
+// décodage du payload -- decodeJwtExpiry ne vérifie pas la signature, il lit "exp".
+function makeFakeJwt(payload: Record<string, unknown>): string {
+  const header = Buffer.from(JSON.stringify({ alg: "none", typ: "JWT" })).toString("base64url");
+  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  return `${header}.${body}.fake-signature`;
+}
 
 interface CapturedRequest {
   url: string;
@@ -55,6 +65,7 @@ test("searchVinted - construit la requête avec les bons paramètres et mappe la
     const headers = calls[0].init!.headers as Record<string, string>;
     assert.match(headers["User-Agent"], /Mozilla/);
     assert.equal(headers.Referer, "https://www.vinted.fr/catalog");
+    assert.equal(headers.Cookie, undefined); // pas de VINTED_ACCESS_TOKEN_WEB configuré dans les tests
 
     assert.equal(items.length, 2); // le 3e item de la fixture n'a pas de prix -> filtré
     assert.deepEqual(items[0], {
@@ -108,6 +119,69 @@ test("searchVinted - se rétablit après une erreur 5xx transitoire", async () =
 
       assert.equal(calls.length, 2);
       assert.equal(items.length, 2);
+    }
+  );
+});
+
+test("decodeJwtExpiry - lit la date d'expiration (claim exp) d'un JWT", () => {
+  const expSeconds = Math.floor(Date.now() / 1000) + 3600;
+  const token = makeFakeJwt({ exp: expSeconds });
+
+  assert.equal(decodeJwtExpiry(token), expSeconds * 1000);
+});
+
+test("decodeJwtExpiry - renvoie null pour un token mal formé ou sans claim exp", () => {
+  assert.equal(decodeJwtExpiry("pas-un-jwt"), null);
+  assert.equal(decodeJwtExpiry(makeFakeJwt({ sub: "user-1" })), null); // pas de champ exp
+  assert.equal(decodeJwtExpiry(""), null);
+});
+
+test("searchVinted - envoie le cookie access_token_web quand il est configuré et valide", async (t) => {
+  const warnSpy = t.mock.method(console, "warn", () => {});
+  const token = makeFakeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }); // expire dans 1h
+
+  await withMockedFetch([() => Response.json(searchFixture)], async (calls) => {
+    await searchVinted("Dracaufeu ex", 50, 3, 5, token);
+
+    const headers = calls[0].init!.headers as Record<string, string>;
+    assert.equal(headers.Cookie, `access_token_web=${token}`);
+    assert.equal(warnSpy.mock.callCount(), 0, "un token valide ne doit déclencher aucun warning");
+  });
+});
+
+test("searchVinted - avertit quand le cookie configuré est déjà expiré (détection proactive)", async (t) => {
+  const warnSpy = t.mock.method(console, "warn", () => {});
+  const token = makeFakeJwt({ exp: Math.floor(Date.now() / 1000) - 3600 }); // expiré depuis 1h
+
+  await withMockedFetch([() => Response.json(searchFixture)], async (calls) => {
+    // La requête part quand même (l'expiration décodée est une heuristique, pas une
+    // certitude absolue) : Vinted reste la source de vérité via un éventuel 401.
+    await searchVinted("Dracaufeu ex", 50, 3, 5, token);
+
+    assert.equal(calls.length, 1);
+    assert.equal(warnSpy.mock.callCount(), 1);
+    const message = String(warnSpy.mock.calls[0].arguments[0]);
+    assert.match(message, /access_token_web semble expiré/i);
+    assert.match(message, /VINTED_ACCESS_TOKEN_WEB/);
+  });
+});
+
+test("searchVinted - log clair et explicite quand Vinted répond 401 (session invalide/expirée)", async (t) => {
+  const errorSpy = t.mock.method(console, "error", () => {});
+  const token = makeFakeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 });
+
+  await withMockedFetch(
+    [() => Response.json({ code: 100, message: "invalid_authentication_token" }, { status: 401 })],
+    async () => {
+      await assert.rejects(
+        () => searchVinted("Dracaufeu ex", 50, 3, 5, token),
+        /Vinted API a échoué: 401/
+      );
+
+      assert.equal(errorSpy.mock.callCount(), 1);
+      const message = String(errorSpy.mock.calls[0].arguments[0]);
+      assert.match(message, /session invalide ou expirée/i);
+      assert.match(message, /VINTED_ACCESS_TOKEN_WEB/);
     }
   );
 });
