@@ -21,6 +21,9 @@ export interface WatchlistEntry {
 // classement se recalcule intégralement à chaque cycle sur l'ensemble des résultats.
 // La dédup via seen_items sert uniquement à ne pas ré-alerter une annonce déjà notifiée
 // (ex: elle reste dans le top 3 d'un cycle à l'autre).
+// Le classement est fait PAR SOURCE (3 moins chères eBay + 3 moins chères Vinted,
+// séparément) et non sur un pool combiné : les deux marketplaces ont des dynamiques de
+// prix différentes, mélanger reviendrait à laisser l'une éclipser systématiquement l'autre.
 const TOP_N_PER_ENTRY = 3;
 
 function loadWatchlist(): WatchlistEntry[] {
@@ -58,6 +61,45 @@ export function selectCheapestN(items: Candidate[], n: number): Candidate[] {
   return [...items].sort((a, b) => a.item.price - b.item.price).slice(0, n);
 }
 
+// Filtre langue sur TOUS les résultats d'une source pour un cycle (pas de dédup ici :
+// le top N doit se recalculer à chaque cycle sur tous les résultats, vus ou non).
+function filterFrenchMatches(source: string, mode: LanguageFilterMode, items: MarketplaceItem[]): Candidate[] {
+  const matches: Candidate[] = [];
+  for (const item of items) {
+    const { isFrench, reason } = isFrenchTitle(item.title, mode);
+    if (!isFrench) continue;
+
+    // Les itemId sont propres à chaque marketplace : on les préfixe par source pour
+    // éviter qu'un id Vinted et un id eBay identiques ne se marquent l'un l'autre "vu".
+    matches.push({ source, seenKey: `${source}:${item.itemId}`, item, reason });
+  }
+  return matches;
+}
+
+// Calcule et envoie les alertes pour UNE source : top N moins chères parmi tous ses
+// résultats du cycle, puis dédup via seen_items pour ne (re)notifier que les nouvelles.
+async function alertCheapestForSource(entryName: string, source: string, matches: Candidate[]): Promise<void> {
+  if (matches.length === 0) return;
+
+  const cheapest = selectCheapestN(matches, TOP_N_PER_ENTRY);
+  const toAlert = cheapest.filter((c) => !hasSeenItem(c.seenKey));
+  const alreadyAlerted = cheapest.length - toAlert.length;
+
+  console.log(
+    `[scheduler] ${matches.length} annonce(s) FR (${source}) pour ${entryName}, top ${cheapest.length} moins chère(s) : ${toAlert.length} nouvelle(s) alerte(s), ${alreadyAlerted} déjà alertée(s) précédemment`
+  );
+
+  for (const { seenKey, item, reason } of toAlert) {
+    console.log(`[scheduler] nouvelle annonce (${source}): "${item.title}" à ${item.price}€ (${reason})`);
+    try {
+      await sendNewListingAlert(item);
+    } catch (err) {
+      console.error(`[scheduler] échec envoi Discord pour ${seenKey}:`, err);
+    }
+    markItemSeen(seenKey, item.title, item.price);
+  }
+}
+
 async function checkEntry(entry: WatchlistEntry): Promise<void> {
   const ebayItems = config.enabledSources.includes("ebay")
     ? await fetchSourceItems("eBay", entry.name, () => searchEbay(entry.ebayQuery))
@@ -70,42 +112,12 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
   // donc l'absence d'indice reste suspecte (mode "strict"). Vinted est déjà 100%
   // francophone par défaut : un titre sans indice de langue y est la norme, pas une
   // anomalie (mode "assume-french") — voir matcher.ts pour le détail des deux modes.
-  const sourcedItems: Array<{ source: string; mode: LanguageFilterMode; item: MarketplaceItem }> = [
-    ...ebayItems.map((item) => ({ source: "ebay", mode: "strict" as const, item })),
-    ...vintedItems.map((item) => ({ source: "vinted", mode: "assume-french" as const, item })),
-  ];
+  const ebayMatches = filterFrenchMatches("ebay", "strict", ebayItems);
+  const vintedMatches = filterFrenchMatches("vinted", "assume-french", vintedItems);
 
-  // Filtre langue sur l'ENSEMBLE des résultats du cycle (pas de dédup ici : le top N doit
-  // se recalculer à chaque cycle sur tous les résultats, vus ou non).
-  const matches: Candidate[] = [];
-  for (const { source, mode, item } of sourcedItems) {
-    const { isFrench, reason } = isFrenchTitle(item.title, mode);
-    if (!isFrench) continue;
-
-    // Les itemId sont propres à chaque marketplace : on les préfixe par source pour
-    // éviter qu'un id Vinted et un id eBay identiques ne se marquent l'un l'autre "vu".
-    matches.push({ source, seenKey: `${source}:${item.itemId}`, item, reason });
-  }
-
-  if (matches.length === 0) return;
-
-  const cheapest = selectCheapestN(matches, TOP_N_PER_ENTRY);
-  const toAlert = cheapest.filter((c) => !hasSeenItem(c.seenKey));
-  const alreadyAlerted = cheapest.length - toAlert.length;
-
-  console.log(
-    `[scheduler] ${matches.length} annonce(s) FR pour ${entry.name}, top ${cheapest.length} moins chère(s) : ${toAlert.length} nouvelle(s) alerte(s), ${alreadyAlerted} déjà alertée(s) précédemment`
-  );
-
-  for (const { source, seenKey, item, reason } of toAlert) {
-    console.log(`[scheduler] nouvelle annonce (${source}): "${item.title}" à ${item.price}€ (${reason})`);
-    try {
-      await sendNewListingAlert(item);
-    } catch (err) {
-      console.error(`[scheduler] échec envoi Discord pour ${seenKey}:`, err);
-    }
-    markItemSeen(seenKey, item.title, item.price);
-  }
+  // Classement et alertes indépendants par source (voir commentaire sur TOP_N_PER_ENTRY).
+  await alertCheapestForSource(entry.name, "ebay", ebayMatches);
+  await alertCheapestForSource(entry.name, "vinted", vintedMatches);
 }
 
 export async function runCheck(): Promise<void> {

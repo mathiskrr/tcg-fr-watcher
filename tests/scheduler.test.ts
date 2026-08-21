@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { selectCheapestN, type Candidate } from "../src/scheduler.js";
 import type { MarketplaceItem } from "../src/types.js";
 
-function makeCandidate(itemId: string, price: number): Candidate {
+function makeCandidate(itemId: string, price: number, source = "vinted"): Candidate {
   const item: MarketplaceItem = {
     itemId,
     title: `Item ${itemId}`,
@@ -14,7 +14,7 @@ function makeCandidate(itemId: string, price: number): Candidate {
     url: `https://example.test/${itemId}`,
     imageUrl: null,
   };
-  return { source: "vinted", seenKey: `vinted:${itemId}`, item, reason: "test" };
+  return { source, seenKey: `${source}:${itemId}`, item, reason: "test" };
 }
 
 test("selectCheapestN - sous le seuil, renvoie tout, trié par prix croissant", () => {
@@ -105,4 +105,36 @@ test("selectCheapestN - se recalcule sur l'ensemble des résultats, pas seulemen
     toAlert2.map((c) => c.item.itemId),
     ["f"]
   ); // "b" et "c" déjà alertées au cycle 1 -> pas de re-notification
+});
+
+test("selectCheapestN - classement indépendant par source (checkEntry appelle la fonction une fois par source, pas sur un pool combiné)", () => {
+  // eBay nettement plus cher que Vinted sur ce cas : un classement combiné laisserait
+  // Vinted éclipser totalement eBay. scheduler.ts appelle donc selectCheapestN séparément
+  // par source (voir alertCheapestForSource) pour garantir jusqu'à 3 alertes par source.
+  const ebayMatches = [
+    makeCandidate("e1", 200, "ebay"),
+    makeCandidate("e2", 150, "ebay"),
+    makeCandidate("e3", 180, "ebay"),
+    makeCandidate("e4", 300, "ebay"),
+  ];
+  const vintedMatches = [
+    makeCandidate("v1", 5, "vinted"),
+    makeCandidate("v2", 8, "vinted"),
+    makeCandidate("v3", 3, "vinted"),
+    makeCandidate("v4", 12, "vinted"),
+  ];
+
+  const topEbay = selectCheapestN(ebayMatches, 3);
+  const topVinted = selectCheapestN(vintedMatches, 3);
+
+  // Les 3 moins chères eBay sont bien remontées, malgré des prix largement supérieurs à
+  // toutes les annonces Vinted -> preuve que les classements ne se mélangent pas.
+  assert.deepEqual(
+    topEbay.map((c) => c.item.itemId),
+    ["e2", "e3", "e1"]
+  );
+  assert.deepEqual(
+    topVinted.map((c) => c.item.itemId),
+    ["v3", "v1", "v2"]
+  );
 });
