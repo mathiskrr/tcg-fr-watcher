@@ -3,6 +3,7 @@
     "name": "Dracaufeu ex",
     "set": "Écarlate et Violet 151",
     "ebayQuery": "Dracaufeu ex 199 carte française",
+    "vintedQuery": "Dracaufeu ex 199 carte française",
     "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Scarlet-Violet-151/Dracaufeu-Ex-V1-199",
     "referencePrice": null
   },
@@ -10,6 +11,7 @@
     "name": "Mew ex",
     "set": "Écarlate et Violet 151",
     "ebayQuery": "Mew ex 205 carte française",
+    "vintedQuery": "Mew ex 205 carte française",
     "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Scarlet-Violet-151/Mew-Ex-V1-205",
     "referencePrice": null
   },
@@ -17,7 +19,16 @@
     "name": "Pikachu Illustrator (proxy exemple)",
     "set": "Promo",
     "ebayQuery": "Pikachu carte française promo",
+    "vintedQuery": "Pikachu carte française promo",
     "cardmarketUrl": null,
     "referencePrice": 20
+  },
+  {
+    "name": "Exemple set vintage (Nuit Noire)",
+    "set": "Nuit Noire",
+    "ebayQuery": "Pokemon Nuit Noire carte française",
+    "vintedQuery": "Pokémon Nuit Noire",
+    "cardmarketUrl": null,
+    "referencePrice": 15
   }
 ]

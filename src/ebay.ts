@@ -1,17 +1,11 @@
 import { config } from "./config.js";
 import { fetchWithRetry } from "./http.js";
+import type { MarketplaceItem } from "./types.js";
 
 const OAUTH_URL = "https://api.ebay.com/identity/v1/oauth2/token";
 const SEARCH_URL = "https://api.ebay.com/buy/browse/v1/item_summary/search";
 
-export interface EbayItem {
-  itemId: string;
-  title: string;
-  price: number;
-  currency: string;
-  url: string;
-  imageUrl: string | null;
-}
+export type EbayItem = MarketplaceItem;
 
 // Le token OAuth "client credentials" est valide ~2h. On le garde en mémoire process
 // et on le regénère seulement quand il approche de l'expiration.

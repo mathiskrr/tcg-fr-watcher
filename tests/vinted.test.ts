@@ -1,0 +1,113 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
+import { searchVinted, COLLECTIBLE_CARDS_CATALOG_ID } from "../src/vinted.js";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+const searchFixture = JSON.parse(
+  readFileSync(join(__dirname, "fixtures/vinted-search-response.json"), "utf-8")
+);
+
+interface CapturedRequest {
+  url: string;
+  init: RequestInit | undefined;
+}
+
+// Monte un fetch mocké renvoyant les réponses de `responses` dans l'ordre à chaque
+// appel (la dernière est réutilisée si searchVinted appelle fetch plus de fois que
+// `responses` n'en contient) ; utile pour simuler un retry qui finit par réussir.
+async function withMockedFetch<T>(
+  responses: Array<() => Response>,
+  run: (calls: CapturedRequest[]) => Promise<T>
+): Promise<T> {
+  const calls: CapturedRequest[] = [];
+  let callIndex = 0;
+  const original = globalThis.fetch;
+
+  globalThis.fetch = (async (url: any, init?: RequestInit) => {
+    calls.push({ url: String(url), init });
+    const factory = responses[Math.min(callIndex, responses.length - 1)];
+    callIndex++;
+    return factory();
+  }) as typeof fetch;
+
+  try {
+    return await run(calls);
+  } finally {
+    globalThis.fetch = original;
+  }
+}
+
+test("searchVinted - construit la requête avec les bons paramètres et mappe la réponse", async () => {
+  await withMockedFetch([() => Response.json(searchFixture)], async (calls) => {
+    const items = await searchVinted("Pokémon Nuit Noire");
+
+    assert.equal(calls.length, 1);
+    const requestUrl = new URL(calls[0].url);
+    assert.equal(requestUrl.searchParams.get("search_text"), "Pokémon Nuit Noire");
+    assert.equal(requestUrl.searchParams.get("catalog_ids"), COLLECTIBLE_CARDS_CATALOG_ID);
+    assert.equal(requestUrl.searchParams.get("order"), "newest_first");
+    assert.equal(requestUrl.searchParams.get("per_page"), "50");
+
+    const headers = calls[0].init!.headers as Record<string, string>;
+    assert.match(headers["User-Agent"], /Mozilla/);
+    assert.equal(headers.Referer, "https://www.vinted.fr/catalog");
+
+    assert.equal(items.length, 2); // le 3e item de la fixture n'a pas de prix -> filtré
+    assert.deepEqual(items[0], {
+      itemId: "4455667788",
+      title: "Carte Pokémon Dracaufeu VF Nuit Noire",
+      price: 18.5,
+      currency: "EUR",
+      url: "https://www.vinted.fr/items/4455667788-carte-pokemon-dracaufeu-vf-nuit-noire",
+      imageUrl: "https://images1.vinted.net/t/abc/photo.jpg",
+    });
+    assert.deepEqual(items[1], {
+      itemId: "4455667799",
+      title: "Carte Mew ex carte française",
+      price: 9,
+      currency: "EUR",
+      url: "https://www.vinted.fr/items/4455667799-carte-mew-ex",
+      imageUrl: null, // pas de champ "photo" dans la fixture -> null
+    });
+  });
+});
+
+for (const blockedStatus of [403, 429]) {
+  test(`searchVinted - retente puis échoue clairement sur blocage HTTP ${blockedStatus}`, async (t) => {
+    const warnSpy = t.mock.method(console, "warn", () => {});
+
+    // retries/délai réduits uniquement pour que le test reste rapide ; le comportement
+    // testé (retry sur 403/429 puis rejet avec log dédié) est celui utilisé en prod.
+    await withMockedFetch(
+      [() => new Response("blocked", { status: blockedStatus })],
+      async (calls) => {
+        await assert.rejects(
+          () => searchVinted("Dracaufeu ex", 50, 2, 5),
+          new RegExp(`Vinted API a échoué: ${blockedStatus}`)
+        );
+
+        assert.equal(calls.length, 2, "doit avoir retenté avant d'abandonner");
+        assert.equal(warnSpy.mock.callCount(), 1);
+        const warnMessage = String(warnSpy.mock.calls[0].arguments[0]);
+        assert.match(warnMessage, /blocage anti-bot/i);
+        assert.match(warnMessage, new RegExp(String(blockedStatus)));
+      }
+    );
+  });
+}
+
+test("searchVinted - se rétablit après une erreur 5xx transitoire", async () => {
+  await withMockedFetch(
+    [() => new Response("server error", { status: 502 }), () => Response.json(searchFixture)],
+    async (calls) => {
+      const items = await searchVinted("Dracaufeu ex", 50, 3, 5);
+
+      assert.equal(calls.length, 2);
+      assert.equal(items.length, 2);
+    }
+  );
+});

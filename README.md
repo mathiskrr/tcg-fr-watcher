@@ -1,19 +1,24 @@
 # tcg-fr-watcher
 
-Bot de veille "bonnes affaires" pour les cartes Pokémon **en français** sur eBay,
+Bot de veille "bonnes affaires" pour les cartes Pokémon **en français** sur eBay et Vinted,
 avec alertes envoyées sur Discord via webhook.
 
 Toutes les 10 minutes (configurable), le bot :
 
-1. Recherche chaque carte de la `watchlist.json` sur eBay (Browse API, marketplace FR).
+1. Recherche chaque carte de la `watchlist.json` sur eBay (Browse API) et Vinted (endpoint interne).
 2. Filtre les annonces pour ne garder que celles dont le titre indique une carte **française**
    (exclut explicitement EN/JP/DE/IT/ES).
 3. Compare le prix de l'annonce à un prix de référence (Cardmarket, ou prix fixé à la main).
 4. Si l'annonce est au moins `(1 - PRICE_THRESHOLD) * 100`% moins chère que la référence,
-   poste une alerte Discord (image, titre, prix, lien, écart %).
+   poste une alerte Discord (image, titre, prix, lien, écart %, source).
 5. Marque l'annonce comme vue en base pour ne jamais la reposter.
 
-> V1 : eBay uniquement. Vinted et Leboncoin sont prévus pour une V2.
+Chaque source (eBay, Vinted) est interrogée indépendamment par entrée de la watchlist : un
+incident sur l'une (clé eBay pas encore approuvée, Vinted qui bloque une requête, etc.) est
+loggé et n'empêche pas les autres sources de tourner.
+
+> V2 : eBay + Vinted. Leboncoin (anti-bot Datadome, plus protégé) prévu pour une V3 si Vinted
+> seul s'avère insuffisant.
 
 ## Stack
 
@@ -46,7 +51,18 @@ Le bot utilise le flux OAuth2 *Client Credentials* (application, sans utilisateu
 appeler la [Browse API](https://developer.ebay.com/api-docs/buy/browse/overview.html) — voir
 `src/ebay.ts`.
 
-### 2. Créer un webhook Discord
+### 2. Vinted
+
+Aucune clé à configurer : `src/vinted.ts` appelle l'endpoint interne utilisé par le site web
+(`/api/v2/catalog/items`), pas une API officielle documentée. **Limitation connue** : cet
+endpoint peut exiger un token de session/anonyme (observé en pratique : `HTTP 401 invalid_authentication_token`
+même avec des en-têtes navigateur réalistes). Le bot gère ce cas proprement (log clair, entrée
+ignorée pour le cycle, pas de crash), mais obtenir des résultats fiables peut nécessiter de
+récupérer d'abord ce jeton (ex: cookie posé lors d'une visite classique du site) — non implémenté
+en V2 pour rester simple. À ajuster dans `src/vinted.ts` si besoin (voir `COLLECTIBLE_CARDS_CATALOG_ID`
+et `BROWSER_HEADERS`).
+
+### 3. Créer un webhook Discord
 
 1. Dans Discord, sur le salon cible : **Paramètres du salon > Intégrations > Webhooks > Nouveau webhook**.
 2. Copier l'URL du webhook.
@@ -55,7 +71,7 @@ appeler la [Browse API](https://developer.ebay.com/api-docs/buy/browse/overview.
    DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
    ```
 
-### 3. Remplir la watchlist
+### 4. Remplir la watchlist
 
 Éditer `watchlist.json` à la racine du projet. Chaque entrée :
 
@@ -63,7 +79,8 @@ appeler la [Browse API](https://developer.ebay.com/api-docs/buy/browse/overview.
 {
   "name": "Dracaufeu ex",              // nom affiché dans les logs
   "set": "Écarlate et Violet 151",     // informatif
-  "ebayQuery": "Dracaufeu ex 199 carte française", // requête envoyée à eBay
+  "ebayQuery": "Dracaufeu ex 199 carte française",   // requête envoyée à eBay
+  "vintedQuery": "Dracaufeu ex 199 carte française", // requête envoyée à Vinted (optionnel, retombe sur ebayQuery si absent/null)
   "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/...",
   "referencePrice": null               // si non-null, utilisé à la place du scraping Cardmarket
 }
@@ -107,37 +124,48 @@ relais selon `CRON_SCHEDULE` (par défaut `*/10 * * * *`, toutes les 10 minutes)
 ```
 src/
   config.ts     # variables d'env typées + validation
+  types.ts      # MarketplaceItem : forme commune des annonces (eBay, Vinted, ...)
   ebay.ts       # client eBay Browse API (OAuth2 client credentials)
+  vinted.ts     # client Vinted (endpoint interne catalog/items, retry sur 403/429)
   cardmarket.ts # prix de référence (scraping léger + cache SQLite)
   pricing.ts    # logique "bonne affaire" (seuil % configurable)
   db.ts         # SQLite (node:sqlite) : seen_items (dédup), price_cache
   discord.ts    # envoi webhook (embed)
   matcher.ts    # filtre langue FR (regex titre + exclusions)
-  http.ts       # fetch avec retry (backoff linéaire, 3 tentatives)
-  scheduler.ts  # orchestration : cron + logique du cycle de vérification
+  http.ts       # fetch avec retry (backoff linéaire, prédicat de statut retryable configurable)
+  scheduler.ts  # orchestration : cron + logique du cycle de vérification (multi-source)
   index.ts      # entrypoint
 tests/
-  env.ts               # variables d'env factices, importées en premier par les tests qui touchent config.ts
-  matcher.test.ts       # isFrenchTitle() contre tests/fixtures/titles.json
-  discord.test.ts       # sendDealAlert() avec fetch mocké, contre tests/fixtures/deal-items.json
-  ebay.test.ts           # OAuth + Browse API mockés, contre tests/fixtures/ebay-*.json
-  fixtures/*.json        # jeux de données des tests
+  env.ts                  # variables d'env factices, importées en premier par les tests qui touchent config.ts
+  matcher.test.ts          # isFrenchTitle() contre tests/fixtures/titles.json
+  discord.test.ts          # sendDealAlert() avec fetch mocké, contre tests/fixtures/deal-items.json
+  ebay.test.ts              # OAuth + Browse API mockés, contre tests/fixtures/ebay-*.json
+  vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
+  fixtures/*.json            # jeux de données des tests
 ```
 
-`ebay.test.ts` ne fait aucun appel réseau réel : il mocke `fetch` pour simuler le flux
-OAuth2 *client credentials* et une réponse Browse API. Le token étant mis en cache au
-niveau du module `ebay.ts`, les 3 tests du fichier s'exécutent dans un ordre précis
-(échec OAuth → succès + mise en cache → réutilisation du cache) — voir le commentaire
-en tête du fichier.
+`ebay.test.ts` et `vinted.test.ts` ne font aucun appel réseau réel : ils mockent `fetch`
+directement. Le token OAuth eBay étant mis en cache au niveau du module `ebay.ts`, les 4 tests
+du fichier s'exécutent dans un ordre précis (échec OAuth → succès + mise en cache → réutilisation
+du cache → expiration simulée et renouvellement) — voir le commentaire en tête du fichier.
+`vinted.test.ts` vérifie en plus que le retry sur 403/429 déclenche bien un log `console.warn`
+explicite, et qu'une erreur 5xx transitoire n'empêche pas un retry réussi ensuite.
 
 Tests écrits avec le test runner intégré à Node (`node:test` + `node:assert`), pas de dépendance
 supplémentaire. `npm test` les lance via `tsx --test`.
 
-## Limitations connues (V1)
+## Limitations connues (V2)
 
-- Une seule source (eBay). Vinted / Leboncoin prévus en V2.
 - Le filtre langue est basé sur des regex sur le titre : une annonce sans aucun indice de langue
   est **rejetée par défaut** (mieux vaut rater une affaire qu'spammer une carte non-FR).
 - Le prix de référence Cardmarket est obtenu par scraping léger, pas via l'API officielle
   (accès restreint aux marchands partenaires) — privilégier `referencePrice` fixe si le scraping
   est bloqué.
+- L'endpoint interne Vinted peut renvoyer `401 invalid_authentication_token` selon le trafic :
+  contrairement à eBay (API officielle) ou Cardmarket (page produit publique), Vinted semble
+  exiger un jeton de session que de simples en-têtes navigateur ne suffisent pas à fournir. Voir
+  la section "Vinted" ci-dessus.
+- Les `itemId` sont propres à chaque marketplace et ne sont donc pas garantis uniques entre eBay
+  et Vinted : `scheduler.ts` préfixe la clé de dédup par source (`ebay:...` / `vinted:...`) dans
+  `seen_items` pour éviter toute collision.
+- Leboncoin (anti-bot Datadome) n'est pas implémenté — prévu pour une V3 si nécessaire.

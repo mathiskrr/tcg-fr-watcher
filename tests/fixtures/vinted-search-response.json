@@ -1,0 +1,22 @@
+{
+  "items": [
+    {
+      "id": 4455667788,
+      "title": "Carte Pokémon Dracaufeu VF Nuit Noire",
+      "price": { "amount": "18.50", "currency_code": "EUR" },
+      "url": "https://www.vinted.fr/items/4455667788-carte-pokemon-dracaufeu-vf-nuit-noire",
+      "photo": { "url": "https://images1.vinted.net/t/abc/photo.jpg" }
+    },
+    {
+      "id": 4455667799,
+      "title": "Carte Mew ex carte française",
+      "price": { "amount": "9.00", "currency_code": "EUR" },
+      "url": "https://www.vinted.fr/items/4455667799-carte-mew-ex"
+    },
+    {
+      "id": 4455667800,
+      "title": "Réservé, en attente de paiement",
+      "url": "https://www.vinted.fr/items/4455667800-reserve"
+    }
+  ]
+}
