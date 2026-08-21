@@ -5,19 +5,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { sendDealAlert } from "../src/discord.js";
-import type { EbayItem } from "../src/ebay.js";
+import { sendNewListingAlert } from "../src/discord.js";
+import type { MarketplaceItem } from "../src/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-interface DealFixture {
-  item: EbayItem;
-  referencePrice: number;
-  discountPercent: number;
-}
-
-const fixtures: DealFixture[] = JSON.parse(
-  readFileSync(join(__dirname, "fixtures/deal-items.json"), "utf-8")
+const fixtures: MarketplaceItem[] = JSON.parse(
+  readFileSync(join(__dirname, "fixtures/listing-items.json"), "utf-8")
 );
 
 interface CapturedCall {
@@ -44,25 +38,25 @@ async function withMockedFetch<T>(
   }
 }
 
-test("sendDealAlert - construit un embed conforme pour chaque fixture", async () => {
+test("sendNewListingAlert - construit un embed conforme pour chaque fixture", async () => {
   await withMockedFetch(
     () => new Response(null, { status: 204 }),
     async (calls) => {
-      for (const { item, referencePrice, discountPercent } of fixtures) {
-        await sendDealAlert(item, referencePrice, discountPercent);
+      for (const item of fixtures) {
+        await sendNewListingAlert(item);
       }
 
       assert.equal(calls.length, fixtures.length);
 
       calls.forEach((call, i) => {
-        const { item, referencePrice, discountPercent } = fixtures[i];
+        const item = fixtures[i];
         const embed = call.body.embeds[0];
 
         assert.equal(embed.title, item.title);
         assert.equal(embed.url, item.url);
+        assert.equal(embed.fields.length, 1);
+        assert.equal(embed.fields[0].name, "Prix");
         assert.equal(embed.fields[0].value, `${item.price.toFixed(2)} €`);
-        assert.equal(embed.fields[1].value, `${referencePrice.toFixed(2)} €`);
-        assert.equal(embed.fields[2].value, `-${discountPercent}%`);
         assert.match(embed.footer.text, new RegExp(item.itemId));
 
         if (item.imageUrl) {
@@ -75,12 +69,11 @@ test("sendDealAlert - construit un embed conforme pour chaque fixture", async ()
   );
 });
 
-test("sendDealAlert - lève une erreur si le webhook Discord répond en échec", async () => {
+test("sendNewListingAlert - lève une erreur si le webhook Discord répond en échec", async () => {
   await withMockedFetch(
     () => new Response("bad request", { status: 400 }),
     async () => {
-      const [{ item, referencePrice, discountPercent }] = fixtures;
-      await assert.rejects(() => sendDealAlert(item, referencePrice, discountPercent));
+      await assert.rejects(() => sendNewListingAlert(fixtures[0]));
     }
   );
 });

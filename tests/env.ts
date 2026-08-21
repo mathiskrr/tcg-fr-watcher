@@ -10,6 +10,5 @@
 process.env.EBAY_APP_ID ??= "test-app-id";
 process.env.EBAY_CERT_ID ??= "test-cert-id";
 process.env.DISCORD_WEBHOOK_URL ??= "https://discord.com/api/webhooks/test/test-token";
-process.env.PRICE_THRESHOLD ??= "0.7";
 process.env.VINTED_ACCESS_TOKEN_WEB ??= "";
 process.env.ENABLED_SOURCES ??= "ebay,vinted";

@@ -1,0 +1,11 @@
+[
+  { "title": "Carte Pokémon", "expected": true, "note": "aucun indice explicite -> accepté par défaut (mode assume-french)" },
+  { "title": "Cartes Pokémon rare pour les connaisseurs", "expected": true, "note": "aucun indice explicite -> accepté" },
+  { "title": "Lot carte pokemon 151", "expected": true, "note": "aucun indice explicite -> accepté" },
+  { "title": "Dracaufeu ex 199 carte française VF NEUF", "expected": true, "note": "VF explicite -> accepté (comme en mode strict)" },
+  { "title": "Charizard ex 199 English Card MINT", "expected": false, "note": "english explicite -> rejeté même en assume-french" },
+  { "title": "Mew ex 205 Japanese Pokemon Card", "expected": false, "note": "japanese explicite -> rejeté même en assume-french" },
+  { "title": "Glurak Karte Deutsch PSA 10", "expected": false, "note": "deutsch explicite -> rejeté même en assume-french" },
+  { "title": "Carta Charizard ex Italiano", "expected": false, "note": "italiano explicite -> rejeté même en assume-french" },
+  { "title": "Carta Pokemon Español Charizard rara", "expected": false, "note": "español explicite -> rejeté même en assume-french" }
+]

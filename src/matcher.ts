@@ -1,8 +1,17 @@
-// Filtre "carte en français" appliqué au TITRE de l'annonce eBay.
-// Approche volontairement simple et sur-inclusive côté exclusion : on préfère
-// rater une bonne affaire FR ambiguë plutôt que spammer Discord avec des cartes EN/JP.
+// Filtre "carte en français" appliqué au TITRE d'une annonce.
+//
+// Deux modes, car les plateformes n'ont pas le même contexte par défaut :
+// - "strict" (eBay, marché international) : un titre sans AUCUN indice de langue est
+//   rejeté par défaut -> on préfère rater une bonne affaire FR ambiguë plutôt que
+//   spammer Discord avec une carte EN/JP dont le vendeur n'a pas précisé la langue.
+// - "assume-french" (Vinted, plateforme déjà francophone par défaut) : un vendeur
+//   Vinted n'a aucune raison d'écrire "VF"/"français" sur un site déjà 100% FR -> un
+//   titre sans indice est donc accepté par défaut, et seule une mention explicite
+//   d'une AUTRE langue (EN/JP/DE/IT/ES...) fait rejeter l'annonce.
+export type LanguageFilterMode = "strict" | "assume-french";
 
-// Mots-clés qui indiquent explicitement une langue étrangère -> exclusion immédiate.
+// Mots-clés qui indiquent explicitement une langue étrangère -> exclusion immédiate,
+// quel que soit le mode.
 const FOREIGN_LANGUAGE_PATTERN =
   /\b(english|en anglais|jap(an|on)?ese?|japon(ais)?e?|jp\b|korean|coréen|german|allemand|deutsch|italian|italien(ne)?|italiano|spanish|espagnol|español|chinese|chinois|dutch|néerlandais|portuguese|portugais)\b/i;
 
@@ -18,7 +27,7 @@ export interface LanguageCheckResult {
   reason: string;
 }
 
-export function isFrenchTitle(title: string): LanguageCheckResult {
+export function isFrenchTitle(title: string, mode: LanguageFilterMode = "strict"): LanguageCheckResult {
   const normalized = title.normalize("NFC");
 
   if (FOREIGN_LANGUAGE_PATTERN.test(normalized)) {
@@ -31,6 +40,13 @@ export function isFrenchTitle(title: string): LanguageCheckResult {
 
   if (FRENCH_HINT_PATTERN.test(normalized)) {
     return { isFrench: true, reason: "indice FR faible détecté (pas de mention étrangère)" };
+  }
+
+  if (mode === "assume-french") {
+    return {
+      isFrench: true,
+      reason: "aucune langue étrangère détectée, plateforme francophone par défaut",
+    };
   }
 
   // Aucun indice de langue -> on rejette par défaut (mieux vaut rater que spammer une carte EN).

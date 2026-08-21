@@ -1,17 +1,17 @@
 # tcg-fr-watcher
 
-Bot de veille "bonnes affaires" pour les cartes Pokémon **en français** sur eBay et Vinted,
-avec alertes envoyées sur Discord via webhook.
+Bot de veille pour les nouvelles annonces de cartes Pokémon **en français** sur eBay et
+Vinted, avec alertes envoyées sur Discord via webhook.
 
 Toutes les 10 minutes (configurable), le bot :
 
 1. Recherche chaque carte de la `watchlist.json` sur eBay (Browse API) et Vinted (endpoint interne).
 2. Filtre les annonces pour ne garder que celles dont le titre indique une carte **française**
    (exclut explicitement EN/JP/DE/IT/ES).
-3. Compare le prix de l'annonce à un prix de référence (Cardmarket, ou prix fixé à la main).
-4. Si l'annonce est au moins `(1 - PRICE_THRESHOLD) * 100`% moins chère que la référence,
-   poste une alerte Discord (image, titre, prix, lien, écart %, source).
-5. Marque l'annonce comme vue en base pour ne jamais la reposter.
+3. Poste une alerte Discord (image, titre, prix, lien) pour **toute** annonce FR non déjà vue —
+   pas de comparaison de prix, pas de notion de "bonne affaire" : c'est un flux brut de nouvelles
+   annonces.
+4. Marque l'annonce comme vue en base pour ne jamais la reposter.
 
 Chaque source (eBay, Vinted) est interrogée indépendamment par entrée de la watchlist : un
 incident sur l'une (clé eBay pas encore approuvée, Vinted qui bloque une requête, etc.) est
@@ -92,20 +92,9 @@ continue de tourner mais les requêtes Vinted échoueront très probablement en 
   "name": "Dracaufeu ex",              // nom affiché dans les logs
   "set": "Écarlate et Violet 151",     // informatif
   "ebayQuery": "Dracaufeu ex 199 carte française",   // requête envoyée à eBay
-  "vintedQuery": "Dracaufeu ex 199 carte française", // requête envoyée à Vinted (optionnel, retombe sur ebayQuery si absent/null)
-  "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/...",
-  "referencePrice": null               // si non-null, utilisé à la place du scraping Cardmarket
+  "vintedQuery": "Dracaufeu ex 199 carte française"  // requête envoyée à Vinted (optionnel, retombe sur ebayQuery si absent/null)
 }
 ```
-
-- Si `referencePrice` est renseigné, il est utilisé tel quel (aucun appel réseau vers Cardmarket).
-- Sinon, le bot scrape la page produit Cardmarket (`cardmarketUrl`) pour en extraire le prix
-  moyen, avec un cache de 24h en base (`price_cache`). **Ce scraping est fragile** : il dépend du
-  markup HTML actuel de Cardmarket (voir `src/cardmarket.ts`) et Cardmarket peut bloquer les
-  requêtes automatisées (HTTP 403). Si ça arrive, l'entrée est simplement ignorée le temps du
-  cycle (log `[cardmarket] échec fetch ...`) — renseigner `referencePrice` à la main reste la
-  solution la plus fiable en attendant une vraie intégration API Cardmarket (nécessite un
-  partenariat marchand).
 
 ## Lancer le bot
 
@@ -113,7 +102,7 @@ continue de tourner mais les requêtes Vinted échoueront très probablement en 
 npm run dev     # mode développement, rechargement auto (tsx watch)
 npm run build   # compile TypeScript -> dist/
 npm run start   # lance la version compilée
-npm test        # tests unitaires (node:test) sur matcher.ts et discord.ts
+npm test        # tests unitaires (node:test)
 ```
 
 Au démarrage, un premier cycle de vérification tourne immédiatement, puis le cron prend le
@@ -123,13 +112,13 @@ relais selon `CRON_SCHEDULE` (par défaut `*/10 * * * *`, toutes les 10 minutes)
 
 | Variable              | Obligatoire | Défaut                    | Description                                   |
 |------------------------|:-----------:|----------------------------|------------------------------------------------|
-| `EBAY_APP_ID`           | oui         | —                           | Client ID eBay Developer                        |
-| `EBAY_CERT_ID`          | oui         | —                           | Client Secret eBay Developer                    |
+| `EBAY_APP_ID`           | selon `ENABLED_SOURCES` | — | Client ID eBay Developer (requis seulement si `ebay` est activé) |
+| `EBAY_CERT_ID`          | selon `ENABLED_SOURCES` | — | Client Secret eBay Developer (requis seulement si `ebay` est activé) |
 | `DISCORD_WEBHOOK_URL`   | oui         | —                           | URL du webhook Discord                          |
-| `PRICE_THRESHOLD`       | non         | `0.7`                       | Seuil "bonne affaire" : prix ≤ référence × seuil |
 | `CRON_SCHEDULE`         | non         | `*/10 * * * *`              | Expression cron du polling                      |
 | `DB_PATH`               | non         | `./data/watcher.sqlite`     | Chemin du fichier SQLite                         |
 | `WATCHLIST_PATH`        | non         | `./watchlist.json`          | Chemin du fichier watchlist                      |
+| `ENABLED_SOURCES`       | non         | `ebay,vinted`               | Sources actives, séparées par des virgules (`ebay`, `vinted`) |
 | `VINTED_ACCESS_TOKEN_WEB` | non       | —                           | Cookie de session Vinted (JWT), voir section "Vinted" |
 
 ## Architecture
@@ -140,18 +129,16 @@ src/
   types.ts      # MarketplaceItem : forme commune des annonces (eBay, Vinted, ...)
   ebay.ts       # client eBay Browse API (OAuth2 client credentials)
   vinted.ts     # client Vinted (endpoint interne catalog/items, retry sur 403/429)
-  cardmarket.ts # prix de référence (scraping léger + cache SQLite)
-  pricing.ts    # logique "bonne affaire" (seuil % configurable)
-  db.ts         # SQLite (node:sqlite) : seen_items (dédup), price_cache
-  discord.ts    # envoi webhook (embed)
-  matcher.ts    # filtre langue FR (regex titre + exclusions)
+  db.ts         # SQLite (node:sqlite) : seen_items (dédup)
+  discord.ts    # envoi webhook (embed titre/prix/lien/image)
+  matcher.ts    # filtre langue FR (regex titre + exclusions), 2 modes selon la source
   http.ts       # fetch avec retry (backoff linéaire, prédicat de statut retryable configurable)
   scheduler.ts  # orchestration : cron + logique du cycle de vérification (multi-source)
   index.ts      # entrypoint
 tests/
   env.ts                  # variables d'env factices, importées en premier par les tests qui touchent config.ts
-  matcher.test.ts          # isFrenchTitle() contre tests/fixtures/titles.json
-  discord.test.ts          # sendDealAlert() avec fetch mocké, contre tests/fixtures/deal-items.json
+  matcher.test.ts          # isFrenchTitle() (modes strict + assume-french), fixtures/titles*.json
+  discord.test.ts          # sendNewListingAlert() avec fetch mocké, contre tests/fixtures/listing-items.json
   ebay.test.ts              # OAuth + Browse API mockés, contre tests/fixtures/ebay-*.json
   vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
   fixtures/*.json            # jeux de données des tests
@@ -170,13 +157,24 @@ qui accepte le token en paramètre explicite pour rester testable sans dépendre
 Tests écrits avec le test runner intégré à Node (`node:test` + `node:assert`), pas de dépendance
 supplémentaire. `npm test` les lance via `tsx --test`.
 
+## Filtre langue (matcher.ts)
+
+`isFrenchTitle(title, mode)` a deux modes, car le "silence" sur la langue ne veut pas dire
+la même chose selon la plateforme :
+
+- **`"strict"`** (défaut, utilisé pour eBay) : marché international où un vendeur précise
+  généralement la langue explicitement. Un titre sans aucun indice est **rejeté par défaut**
+  (mieux vaut rater une annonce FR ambiguë qu'spammer une carte EN/JP).
+- **`"assume-french"`** (utilisé pour Vinted) : plateforme déjà 100% francophone par défaut —
+  en pratique, un vendeur Vinted n'a aucune raison d'écrire "VF"/"français" sur ses propres
+  cartes. Un titre sans indice est donc **accepté par défaut** ; seule une mention explicite
+  d'une **autre** langue (EN/JP/DE/IT/ES...) fait rejeter l'annonce.
+
+Dans les deux modes, une mention explicite de langue (française ou étrangère) est traitée
+identiquement — seul le comportement par défaut en l'absence d'indice change.
+
 ## Limitations connues (V2)
 
-- Le filtre langue est basé sur des regex sur le titre : une annonce sans aucun indice de langue
-  est **rejetée par défaut** (mieux vaut rater une affaire qu'spammer une carte non-FR).
-- Le prix de référence Cardmarket est obtenu par scraping léger, pas via l'API officielle
-  (accès restreint aux marchands partenaires) — privilégier `referencePrice` fixe si le scraping
-  est bloqué.
 - Le cookie `access_token_web` de Vinted est configuré manuellement et expire au bout de
   quelques heures : sans renouvellement régulier, les requêtes Vinted finissent par échouer
   en 401 (détecté et loggé clairement, voir section "Vinted" ci-dessus, mais pas de renouvellement
@@ -185,4 +183,7 @@ supplémentaire. `npm test` les lance via `tsx --test`.
 - Les `itemId` sont propres à chaque marketplace et ne sont donc pas garantis uniques entre eBay
   et Vinted : `scheduler.ts` préfixe la clé de dédup par source (`ebay:...` / `vinted:...`) dans
   `seen_items` pour éviter toute collision.
+- Pas de comparaison de prix ni de notion de "bonne affaire" : le bot poste toute nouvelle
+  annonce FR détectée, sans filtre sur le prix. Une watchlist trop large peut donc générer
+  beaucoup d'alertes Discord.
 - Leboncoin (anti-bot Datadome) n'est pas implémenté — prévu pour une V3 si nécessaire.

@@ -1,4 +1,4 @@
-// Petit helper de retry partagé par les clients eBay / Cardmarket / Vinted.
+// Petit helper de retry partagé par les clients eBay / Vinted.
 // Volontairement minimal (pas de lib externe) : 3 tentatives, backoff linéaire.
 // isRetryableStatus permet à un appelant (ex: Vinted) de retenter aussi sur 403/429
 // (blocage anti-bot probable) sans changer le comportement par défaut des autres clients.

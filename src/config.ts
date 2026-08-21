@@ -45,7 +45,6 @@ export const config = {
   ebayAppId: enabledSources.includes("ebay") ? required("EBAY_APP_ID") : process.env.EBAY_APP_ID ?? "",
   ebayCertId: enabledSources.includes("ebay") ? required("EBAY_CERT_ID") : process.env.EBAY_CERT_ID ?? "",
   discordWebhookUrl: required("DISCORD_WEBHOOK_URL"),
-  priceThreshold: Number(process.env.PRICE_THRESHOLD ?? "0.7"),
   cronSchedule: process.env.CRON_SCHEDULE ?? "*/10 * * * *",
   dbPath: process.env.DB_PATH ?? "./data/watcher.sqlite",
   watchlistPath: process.env.WATCHLIST_PATH ?? "./watchlist.json",

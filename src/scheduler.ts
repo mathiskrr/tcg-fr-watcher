@@ -3,11 +3,9 @@ import cron from "node-cron";
 import { config } from "./config.js";
 import { searchEbay } from "./ebay.js";
 import { searchVinted } from "./vinted.js";
-import { getReferencePrice } from "./cardmarket.js";
-import { evaluateDeal } from "./pricing.js";
-import { isFrenchTitle } from "./matcher.js";
+import { isFrenchTitle, type LanguageFilterMode } from "./matcher.js";
 import { hasSeenItem, markItemSeen } from "./db.js";
-import { sendDealAlert } from "./discord.js";
+import { sendNewListingAlert } from "./discord.js";
 import type { MarketplaceItem } from "./types.js";
 
 export interface WatchlistEntry {
@@ -16,8 +14,6 @@ export interface WatchlistEntry {
   ebayQuery: string;
   // Requête Vinted dédiée ; si absente/null, retombe sur ebayQuery.
   vintedQuery?: string | null;
-  cardmarketUrl: string | null;
-  referencePrice: number | null;
 }
 
 function loadWatchlist(): WatchlistEntry[] {
@@ -41,12 +37,6 @@ async function fetchSourceItems(
 }
 
 async function checkEntry(entry: WatchlistEntry): Promise<void> {
-  const referencePrice = await getReferencePrice(entry);
-  if (referencePrice === null) {
-    console.warn(`[scheduler] pas de prix de référence pour "${entry.name}", entrée ignorée`);
-    return;
-  }
-
   const ebayItems = config.enabledSources.includes("ebay")
     ? await fetchSourceItems("eBay", entry.name, () => searchEbay(entry.ebayQuery))
     : [];
@@ -54,35 +44,26 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
     ? await fetchSourceItems("Vinted", entry.name, () => searchVinted(entry.vintedQuery ?? entry.ebayQuery))
     : [];
 
-  const sourcedItems: Array<{ source: string; item: MarketplaceItem }> = [
-    ...ebayItems.map((item) => ({ source: "ebay", item })),
-    ...vintedItems.map((item) => ({ source: "vinted", item })),
+  // eBay est un marché international : un vendeur y précise explicitement la langue,
+  // donc l'absence d'indice reste suspecte (mode "strict"). Vinted est déjà 100%
+  // francophone par défaut : un titre sans indice de langue y est la norme, pas une
+  // anomalie (mode "assume-french") — voir matcher.ts pour le détail des deux modes.
+  const sourcedItems: Array<{ source: string; mode: LanguageFilterMode; item: MarketplaceItem }> = [
+    ...ebayItems.map((item) => ({ source: "ebay", mode: "strict" as const, item })),
+    ...vintedItems.map((item) => ({ source: "vinted", mode: "assume-french" as const, item })),
   ];
 
-  for (const { source, item } of sourcedItems) {
+  for (const { source, mode, item } of sourcedItems) {
     // Les itemId sont propres à chaque marketplace : on les préfixe par source pour
     // éviter qu'un id Vinted et un id eBay identiques ne se marquent l'un l'autre "vu".
     const seenKey = `${source}:${item.itemId}`;
     if (hasSeenItem(seenKey)) continue;
 
-    const { isFrench, reason } = isFrenchTitle(item.title);
-    if (!isFrench) {
-      markItemSeen(seenKey, item.title, item.price);
-      continue;
-    }
-
-    const { isGoodDeal, discountPercent } = evaluateDeal(
-      item.price,
-      referencePrice,
-      config.priceThreshold
-    );
-
-    if (isGoodDeal) {
-      console.log(
-        `[scheduler] bonne affaire détectée (${source}): "${item.title}" à ${item.price}€ (-${discountPercent}%, ${reason})`
-      );
+    const { isFrench, reason } = isFrenchTitle(item.title, mode);
+    if (isFrench) {
+      console.log(`[scheduler] nouvelle annonce (${source}): "${item.title}" à ${item.price}€ (${reason})`);
       try {
-        await sendDealAlert(item, referencePrice, discountPercent);
+        await sendNewListingAlert(item);
       } catch (err) {
         console.error(`[scheduler] échec envoi Discord pour ${seenKey}:`, err);
       }

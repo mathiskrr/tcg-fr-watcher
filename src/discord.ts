@@ -1,23 +1,15 @@
 import { config } from "./config.js";
 import { fetchWithRetry } from "./http.js";
-import type { EbayItem } from "./ebay.js";
+import type { MarketplaceItem } from "./types.js";
 
-export async function sendDealAlert(
-  item: EbayItem,
-  referencePrice: number,
-  discountPercent: number
-): Promise<void> {
+export async function sendNewListingAlert(item: MarketplaceItem): Promise<void> {
   const embed = {
     title: item.title,
     url: item.url,
     color: 0x2ecc71,
     thumbnail: item.imageUrl ? { url: item.imageUrl } : undefined,
-    fields: [
-      { name: "Prix annonce", value: `${item.price.toFixed(2)} €`, inline: true },
-      { name: "Prix référence (Cardmarket)", value: `${referencePrice.toFixed(2)} €`, inline: true },
-      { name: "Écart", value: `-${discountPercent}%`, inline: true },
-    ],
-    footer: { text: `eBay item ${item.itemId}` },
+    fields: [{ name: "Prix", value: `${item.price.toFixed(2)} €`, inline: true }],
+    footer: { text: `item ${item.itemId}` },
   };
 
   const res = await fetchWithRetry(config.discordWebhookUrl, {
