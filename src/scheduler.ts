@@ -16,11 +16,12 @@ export interface WatchlistEntry {
   vintedQuery?: string | null;
 }
 
-// Anti-spam : une carte très demandée peut avoir des dizaines d'annonces neuves dans un
-// même cycle (relances, revendeurs multiples...). Au-delà de ce seuil, on n'alerte que sur
-// les moins chères pour garder un volume de notifications Discord gérable — le reste est
-// tout de même marqué "vu" pour ne pas revenir dessus au cycle suivant.
-const MAX_ALERTS_PER_ENTRY = 5;
+// Chaque cycle remonte systématiquement les TOP_N_PER_ENTRY annonces FR les moins
+// chères actuellement disponibles pour l'entrée — pas seulement les nouvelles : le
+// classement se recalcule intégralement à chaque cycle sur l'ensemble des résultats.
+// La dédup via seen_items sert uniquement à ne pas ré-alerter une annonce déjà notifiée
+// (ex: elle reste dans le top 3 d'un cycle à l'autre).
+const TOP_N_PER_ENTRY = 3;
 
 function loadWatchlist(): WatchlistEntry[] {
   const raw = readFileSync(config.watchlistPath, "utf-8");
@@ -51,17 +52,10 @@ export interface Candidate {
 
 // Fonction pure (pas d'I/O) pour rester testable isolément, sans dépendre de config.ts /
 // db.ts / du réseau comme le reste de scheduler.ts. Trie par prix croissant et ne retient
-// que les `maxAlertsPerEntry` moins chères ; le reste doit tout de même être marqué "vu"
-// par l'appelant pour ne pas revenir dessus au cycle suivant.
-export function selectAlertsWithinCap(
-  candidates: Candidate[],
-  maxAlertsPerEntry: number
-): { toAlert: Candidate[]; ignored: Candidate[] } {
-  const sorted = [...candidates].sort((a, b) => a.item.price - b.item.price);
-  return {
-    toAlert: sorted.slice(0, maxAlertsPerEntry),
-    ignored: sorted.slice(maxAlertsPerEntry),
-  };
+// que les `n` moins chères, indépendamment de leur statut "vu" ou non — ce filtrage-là est
+// fait séparément, après coup, par l'appelant (voir checkEntry).
+export function selectCheapestN(items: Candidate[], n: number): Candidate[] {
+  return [...items].sort((a, b) => a.item.price - b.item.price).slice(0, n);
 }
 
 async function checkEntry(entry: WatchlistEntry): Promise<void> {
@@ -81,35 +75,27 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
     ...vintedItems.map((item) => ({ source: "vinted", mode: "assume-french" as const, item })),
   ];
 
-  // 1er passage : dédup (seen_items) + filtre langue. Les non-FR et déjà-vues sont
-  // immédiatement marquées vues, tout le reste devient candidat à une alerte.
-  const candidates: Candidate[] = [];
-
+  // Filtre langue sur l'ENSEMBLE des résultats du cycle (pas de dédup ici : le top N doit
+  // se recalculer à chaque cycle sur tous les résultats, vus ou non).
+  const matches: Candidate[] = [];
   for (const { source, mode, item } of sourcedItems) {
+    const { isFrench, reason } = isFrenchTitle(item.title, mode);
+    if (!isFrench) continue;
+
     // Les itemId sont propres à chaque marketplace : on les préfixe par source pour
     // éviter qu'un id Vinted et un id eBay identiques ne se marquent l'un l'autre "vu".
-    const seenKey = `${source}:${item.itemId}`;
-    if (hasSeenItem(seenKey)) continue;
-
-    const { isFrench, reason } = isFrenchTitle(item.title, mode);
-    if (!isFrench) {
-      markItemSeen(seenKey, item.title, item.price);
-      continue;
-    }
-
-    candidates.push({ source, seenKey, item, reason });
+    matches.push({ source, seenKey: `${source}:${item.itemId}`, item, reason });
   }
 
-  if (candidates.length === 0) return;
+  if (matches.length === 0) return;
 
-  // 2e passage : anti-spam. Au-delà du seuil, seules les moins chères sont alertées.
-  const { toAlert, ignored } = selectAlertsWithinCap(candidates, MAX_ALERTS_PER_ENTRY);
+  const cheapest = selectCheapestN(matches, TOP_N_PER_ENTRY);
+  const toAlert = cheapest.filter((c) => !hasSeenItem(c.seenKey));
+  const alreadyAlerted = cheapest.length - toAlert.length;
 
-  if (ignored.length > 0) {
-    console.log(
-      `[scheduler] ${candidates.length} annonces pour ${entry.name}, ${toAlert.length} alertes envoyées (moins chères), ${ignored.length} ignorées (spam commun)`
-    );
-  }
+  console.log(
+    `[scheduler] ${matches.length} annonce(s) FR pour ${entry.name}, top ${cheapest.length} moins chère(s) : ${toAlert.length} nouvelle(s) alerte(s), ${alreadyAlerted} déjà alertée(s) précédemment`
+  );
 
   for (const { source, seenKey, item, reason } of toAlert) {
     console.log(`[scheduler] nouvelle annonce (${source}): "${item.title}" à ${item.price}€ (${reason})`);
@@ -118,12 +104,6 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
     } catch (err) {
       console.error(`[scheduler] échec envoi Discord pour ${seenKey}:`, err);
     }
-    markItemSeen(seenKey, item.title, item.price);
-  }
-
-  // Toujours dédupliquer via seen_items, même les annonces ignorées pour cause de spam :
-  // on ne veut pas les revoir au cycle suivant.
-  for (const { seenKey, item } of ignored) {
     markItemSeen(seenKey, item.title, item.price);
   }
 }

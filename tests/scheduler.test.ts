@@ -2,7 +2,7 @@ import "./env.js"; // doit rester le premier import : peuple process.env avant q
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectAlertsWithinCap, type Candidate } from "../src/scheduler.js";
+import { selectCheapestN, type Candidate } from "../src/scheduler.js";
 import type { MarketplaceItem } from "../src/types.js";
 
 function makeCandidate(itemId: string, price: number): Candidate {
@@ -17,58 +17,92 @@ function makeCandidate(itemId: string, price: number): Candidate {
   return { source: "vinted", seenKey: `vinted:${itemId}`, item, reason: "test" };
 }
 
-test("selectAlertsWithinCap - sous le seuil, tout est alerté, rien n'est ignoré", () => {
-  const candidates = [makeCandidate("1", 10), makeCandidate("2", 5), makeCandidate("3", 20)];
+test("selectCheapestN - sous le seuil, renvoie tout, trié par prix croissant", () => {
+  const items = [makeCandidate("1", 10), makeCandidate("2", 5), makeCandidate("3", 20)];
 
-  const { toAlert, ignored } = selectAlertsWithinCap(candidates, 5);
+  const cheapest = selectCheapestN(items, 5);
 
-  assert.equal(toAlert.length, 3);
-  assert.equal(ignored.length, 0);
-  // Toujours trié par prix croissant, même sous le seuil.
+  assert.equal(cheapest.length, 3);
   assert.deepEqual(
-    toAlert.map((c) => c.item.itemId),
+    cheapest.map((c) => c.item.itemId),
     ["2", "1", "3"]
   );
 });
 
-test("selectAlertsWithinCap - au-delà du seuil, ne garde que les N moins chères", () => {
-  // 44 annonces pour une carte très demandée, comme dans l'exemple du besoin.
-  const candidates = Array.from({ length: 44 }, (_, i) => makeCandidate(String(i), 100 - i));
+test("selectCheapestN - au-delà du seuil, ne garde que les N moins chères", () => {
+  const items = Array.from({ length: 44 }, (_, i) => makeCandidate(String(i), 100 - i));
   // Prix : item "0" -> 100€ (le plus cher) ... item "43" -> 57€ (le moins cher).
 
-  const { toAlert, ignored } = selectAlertsWithinCap(candidates, 5);
+  const cheapest = selectCheapestN(items, 3);
 
-  assert.equal(toAlert.length, 5);
-  assert.equal(ignored.length, 39);
-
-  // Les 5 alertées doivent être les 5 moins chères (prix 60, 59, 58, 57... -> items 40..43 et 39).
-  const alertedPrices = toAlert.map((c) => c.item.price).sort((a, b) => a - b);
-  assert.deepEqual(alertedPrices, [57, 58, 59, 60, 61]);
-
-  // Aucun chevauchement entre alertées et ignorées.
-  const alertedIds = new Set(toAlert.map((c) => c.item.itemId));
-  for (const c of ignored) {
-    assert.equal(alertedIds.has(c.item.itemId), false);
-  }
+  assert.equal(cheapest.length, 3);
+  assert.deepEqual(
+    cheapest.map((c) => c.item.price),
+    [57, 58, 59]
+  );
+  assert.deepEqual(
+    cheapest.map((c) => c.item.itemId),
+    ["43", "42", "41"]
+  );
 });
 
-test("selectAlertsWithinCap - pile au seuil, rien n'est ignoré", () => {
-  const candidates = Array.from({ length: 5 }, (_, i) => makeCandidate(String(i), i));
+test("selectCheapestN - ne modifie pas le tableau passé en entrée", () => {
+  const items = [makeCandidate("1", 30), makeCandidate("2", 10)];
+  const originalOrder = items.map((c) => c.item.itemId);
 
-  const { toAlert, ignored } = selectAlertsWithinCap(candidates, 5);
-
-  assert.equal(toAlert.length, 5);
-  assert.equal(ignored.length, 0);
-});
-
-test("selectAlertsWithinCap - ne modifie pas le tableau passé en entrée", () => {
-  const candidates = [makeCandidate("1", 30), makeCandidate("2", 10)];
-  const originalOrder = candidates.map((c) => c.item.itemId);
-
-  selectAlertsWithinCap(candidates, 1);
+  selectCheapestN(items, 1);
 
   assert.deepEqual(
-    candidates.map((c) => c.item.itemId),
+    items.map((c) => c.item.itemId),
     originalOrder
   );
+});
+
+test("selectCheapestN - se recalcule sur l'ensemble des résultats, pas seulement les nouveaux (via un scénario 2 cycles)", () => {
+  // Simule le comportement attendu au niveau de checkEntry : le classement "top N moins
+  // chères" est recalculé sur TOUS les résultats du cycle, la dédup (seen_items) étant
+  // appliquée ensuite, séparément, uniquement pour décider quoi (re)alerter.
+  const seen = new Set<string>();
+
+  // Cycle 1 : 5 annonces disponibles.
+  const cycle1 = [
+    makeCandidate("a", 10),
+    makeCandidate("b", 20),
+    makeCandidate("c", 30),
+    makeCandidate("d", 40),
+    makeCandidate("e", 50),
+  ];
+  const top1 = selectCheapestN(cycle1, 3);
+  const toAlert1 = top1.filter((c) => !seen.has(c.seenKey));
+  for (const c of toAlert1) seen.add(c.seenKey);
+
+  assert.deepEqual(
+    top1.map((c) => c.item.itemId),
+    ["a", "b", "c"]
+  );
+  assert.deepEqual(
+    toAlert1.map((c) => c.item.itemId),
+    ["a", "b", "c"]
+  ); // tout est nouveau au 1er cycle
+
+  // Cycle 2 : "a" a disparu (vendue), une nouvelle annonce "f" à 5€ apparaît moins chère
+  // que tout le reste. "b" et "c" sont toujours là (déjà alertées au cycle 1).
+  const cycle2 = [
+    makeCandidate("f", 5),
+    makeCandidate("b", 20),
+    makeCandidate("c", 30),
+    makeCandidate("d", 40),
+    makeCandidate("e", 50),
+  ];
+  const top2 = selectCheapestN(cycle2, 3);
+  const toAlert2 = top2.filter((c) => !seen.has(c.seenKey));
+
+  assert.deepEqual(
+    top2.map((c) => c.item.itemId),
+    ["f", "b", "c"]
+  ); // recalculé sur l'ensemble des résultats du cycle 2, pas seulement "f" qui est nouveau
+  assert.deepEqual(
+    toAlert2.map((c) => c.item.itemId),
+    ["f"]
+  ); // "b" et "c" déjà alertées au cycle 1 -> pas de re-notification
 });
