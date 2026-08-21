@@ -46,5 +46,29 @@
     "query": "xyzxyzxyz nonexistent gibberish query 999",
     "expected": false,
     "note": "requete absurde : Vinted ne renvoie jamais un tableau vide, le filtre doit rejeter"
+  },
+  {
+    "title": "Floramantis ex 004/084 Nuit noire",
+    "query": "Floramantis ex 096/084",
+    "expected": false,
+    "note": "meme carte/set mais numero different -> rejete malgre le fort chevauchement de mots-cles"
+  },
+  {
+    "title": "Floramantis ex 096/084 Nuit noire scellée",
+    "query": "Floramantis ex 096/084",
+    "expected": true,
+    "note": "numero identique -> accepte"
+  },
+  {
+    "title": "Floramantis ex 96/84 PBL",
+    "query": "Floramantis ex 096/084",
+    "expected": true,
+    "note": "numero identique sans les zeros de tete -> comparaison numerique, pas textuelle"
+  },
+  {
+    "title": "Mega Darkrai ex 048/084 Buio Pesto IT",
+    "query": "Mega Darkrai ex 120/084 Nuit Noire gold",
+    "expected": false,
+    "note": "numero different (048 vs 120) -> rejete meme si Mega/Darkrai/ex se chevauchent"
   }
 ]

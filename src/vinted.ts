@@ -67,10 +67,45 @@ function significantQueryWords(query: string): string[] {
     .filter((word) => word.length >= 3 && !STOPWORDS.has(word));
 }
 
+interface CardNumber {
+  numerator: number;
+  denominator: number;
+}
+
+// Numéro de carte Pokémon, format "NNN/084" (numérateur = numéro de la carte dans le set,
+// dénominateur = taille du set). Comparaison numérique (pas textuelle) pour ignorer les
+// zéros de tête : "4/84" et "004/084" doivent être considérés comme le même numéro.
+const CARD_NUMBER_PATTERN = /\b(\d{1,4})\/(\d{1,4})\b/;
+
+function extractCardNumber(text: string): CardNumber | null {
+  const match = text.match(CARD_NUMBER_PATTERN);
+  if (!match) return null;
+  return { numerator: parseInt(match[1], 10), denominator: parseInt(match[2], 10) };
+}
+
+function sameCardNumber(a: CardNumber, b: CardNumber): boolean {
+  return a.numerator === b.numerator && a.denominator === b.denominator;
+}
+
 // Un titre est jugé pertinent s'il contient au moins la moitié (arrondi au-dessus) des mots
 // significatifs de la requête. Évite de rejeter sur un seul mot manquant (accord, abréviation
 // différente) tout en filtrant le contenu générique renvoyé par le fallback de Vinted.
+//
+// Cas particulier : si la requête précise un numéro de carte (ex: "096/084"), un titre qui
+// affiche lui aussi un numéro DOIT correspondre exactement -> un simple chevauchement de
+// mots-clés ne suffit pas ("Floramantis ex 004/084" ne doit pas matcher une recherche pour
+// "Floramantis ex 096/084", même si "Floramantis" et "ex" sont présents dans les deux). Un
+// titre sans numéro du tout retombe sur le filtre mots-clés habituel (pas assez d'info pour
+// trancher autrement).
 export function isRelevantToQuery(title: string, query: string): boolean {
+  const queryCardNumber = extractCardNumber(query);
+  if (queryCardNumber !== null) {
+    const titleCardNumber = extractCardNumber(title);
+    if (titleCardNumber !== null) {
+      return sameCardNumber(queryCardNumber, titleCardNumber);
+    }
+  }
+
   const words = significantQueryWords(query);
   if (words.length === 0) return true;
 

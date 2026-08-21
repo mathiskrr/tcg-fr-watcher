@@ -123,6 +123,27 @@ test("isRelevantToQuery - fixtures issues d'observations réelles (Vinted ne ren
   }
 });
 
+test("isRelevantToQuery - un titre sans numéro de carte retombe sur le filtre mots-clés habituel", () => {
+  // Le titre ne contient aucun numéro NNN/DDD : impossible de vérifier une correspondance
+  // exacte, donc on ne rejette pas systématiquement juste parce que la requête en a un —
+  // le filtre mots-clés existant tranche normalement (ici largement satisfait : 4 mots
+  // significatifs sur 6 matchent, seuil à 3).
+  assert.equal(
+    isRelevantToQuery(
+      "Floramantis ex Nuit Noire ME05 carte française scellée",
+      "Floramantis ex 096/084 Nuit Noire ME05"
+    ),
+    true
+  );
+});
+
+test("isRelevantToQuery - un numéro de carte différent rejette même avec un fort chevauchement de mots-clés", () => {
+  // Même carte, même set, mais un numéro de variante différent (ex: base vs Alt Art) :
+  // le chevauchement de mots-clés seul ("floramantis", "ex", "nuit", "noire") serait
+  // largement suffisant pour matcher sans la vérification stricte du numéro.
+  assert.equal(isRelevantToQuery("Floramantis ex 004/084 Nuit noire", "Floramantis ex 096/084"), false);
+});
+
 test("searchVinted - filtre les résultats hors-sujet renvoyés par le fallback Vinted", async () => {
   const mixedResponse = {
     items: [
