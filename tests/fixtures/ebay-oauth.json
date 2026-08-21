@@ -7,5 +7,10 @@
   "error": {
     "error": "invalid_client",
     "error_description": "client authentication failed"
+  },
+  "refreshed": {
+    "access_token": "test-access-token-refreshed456",
+    "expires_in": 7200,
+    "token_type": "Application Access Token"
   }
 }

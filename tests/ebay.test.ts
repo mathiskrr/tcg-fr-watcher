@@ -23,10 +23,12 @@ interface CapturedRequest {
 // voulu : un seul appel OAuth par process tant que le token n'a pas expiré). Les tests
 // ci-dessous s'appuient donc sur CET ORDRE D'EXÉCUTION précis :
 //   1. échec OAuth (aucun token encore en cache)
-//   2. succès OAuth + Browse API (peuple le cache)
+//   2. succès OAuth + Browse API (peuple le cache, expire dans ~7140s réels)
 //   3. réutilisation du cache (aucun second appel OAuth)
+//   4. horloge simulée avancée au-delà de l'expiration -> renouvellement automatique
 // node:test exécute les tests d'un même fichier séquentiellement dans l'ordre de
-// déclaration, donc cet ordre est garanti sans mock de temps.
+// déclaration, donc cet ordre est garanti sans mock de temps (sauf le test 4, qui
+// simule lui-même l'écoulement du temps via node:test timers).
 
 async function withMockedFetch<T>(
   oauthResponse: () => Response,
@@ -135,4 +137,35 @@ test("3. searchEbay - réutilise le token en cache, sans second appel OAuth", as
       assert.equal(items.length, 2);
     }
   );
+});
+
+test("4. searchEbay - renouvelle le token une fois celui-ci expiré", async (t) => {
+  // Le token mis en cache par le test 2 expire ~7140s après son obtention (expires_in
+  // 7200s - marge de sécurité 60s). On avance l'horloge au-delà pour forcer un refetch,
+  // sans attendre 2h réelles ni dépendre d'un vrai sleep.
+  // IMPORTANT: `now` doit être fourni, sinon enable() repart d'un epoch simulé à 0 au
+  // lieu de l'heure réelle actuelle — le "faux" Date.now() se retrouverait alors bien
+  // avant expiresAt (calculé avec la vraie horloge dans le test 2), et tick() ne
+  // suffirait jamais à dépasser cette date -> le test resterait sur le token en cache.
+  t.mock.timers.enable({ apis: ["Date"], now: Date.now() });
+
+  try {
+    await withMockedFetch(
+      () => Response.json(oauthFixtures.refreshed),
+      () => Response.json(searchFixture),
+      async (calls) => {
+        t.mock.timers.tick(7141 * 1000);
+
+        const items = await searchEbay("Dracaufeu ex carte française");
+
+        assert.equal(calls.oauth.length, 1, "un nouvel appel OAuth doit être déclenché après expiration");
+        assert.equal(calls.search.length, 1);
+        const searchHeaders = calls.search[0].init!.headers as Record<string, string>;
+        assert.equal(searchHeaders.Authorization, `Bearer ${oauthFixtures.refreshed.access_token}`);
+        assert.equal(items.length, 2);
+      }
+    );
+  } finally {
+    t.mock.timers.reset();
+  }
 });
