@@ -1,0 +1,11 @@
+{
+  "success": {
+    "access_token": "test-access-token-abc123",
+    "expires_in": 7200,
+    "token_type": "Application Access Token"
+  },
+  "error": {
+    "error": "invalid_client",
+    "error_description": "client authentication failed"
+  }
+}

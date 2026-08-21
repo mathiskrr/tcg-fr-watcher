@@ -1,0 +1,15 @@
+[
+  { "title": "Dracaufeu ex 199 carte française VF NEUF", "expected": true, "note": "mention explicite VF + française" },
+  { "title": "Mewtwo VF holo rare", "expected": true, "note": "code VF isolé" },
+  { "title": "Dracaufeu ex FR 199/165", "expected": true, "note": "code FR isolé" },
+  { "title": "Pikachu Illustrator carte francaise promo", "expected": true, "note": "francaise sans cédille" },
+  { "title": "Carte Mew ex en français neuve sous blister", "expected": true, "note": "en français" },
+  { "title": "Charizard ex 199 English Card MINT", "expected": false, "note": "english explicite" },
+  { "title": "Mew ex 205 Japanese Pokemon Card", "expected": false, "note": "japanese explicite" },
+  { "title": "Pikachu Card japonaise édition limitée", "expected": false, "note": "japonaise explicite" },
+  { "title": "Glurak Karte Deutsch PSA 10", "expected": false, "note": "deutsch explicite" },
+  { "title": "Carta Charizard ex Italiano", "expected": false, "note": "italiano explicite" },
+  { "title": "Carta Pokemon Español Charizard rara", "expected": false, "note": "español explicite" },
+  { "title": "Pokemon card no language info at all", "expected": false, "note": "aucun indice -> rejet par defaut" },
+  { "title": "Charizard ex 199 korean version PSA 9", "expected": false, "note": "korean explicite" }
+]

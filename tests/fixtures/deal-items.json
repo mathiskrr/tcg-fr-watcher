@@ -1,0 +1,26 @@
+[
+  {
+    "item": {
+      "itemId": "v1|123456789012|0",
+      "title": "Dracaufeu ex 199 carte française VF NEUF",
+      "price": 30.5,
+      "currency": "EUR",
+      "url": "https://www.ebay.fr/itm/123456789012",
+      "imageUrl": "https://i.ebayimg.com/images/g/abcAAOSw/s-l500.jpg"
+    },
+    "referencePrice": 45,
+    "discountPercent": 32
+  },
+  {
+    "item": {
+      "itemId": "v1|987654321098|0",
+      "title": "Mew ex 205 carte française",
+      "price": 12,
+      "currency": "EUR",
+      "url": "https://www.ebay.fr/itm/987654321098",
+      "imageUrl": null
+    },
+    "referencePrice": 20,
+    "discountPercent": 40
+  }
+]

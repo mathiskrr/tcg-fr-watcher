@@ -1,0 +1,22 @@
+{
+  "itemSummaries": [
+    {
+      "itemId": "v1|111111111111|0",
+      "title": "Dracaufeu ex 199 carte française VF NEUF",
+      "price": { "value": "35.00", "currency": "EUR" },
+      "itemWebUrl": "https://www.ebay.fr/itm/111111111111",
+      "image": { "imageUrl": "https://i.ebayimg.com/images/g/aaa/s-l500.jpg" }
+    },
+    {
+      "itemId": "v1|222222222222|0",
+      "title": "Mew ex 205 carte française",
+      "price": { "value": "12.50", "currency": "EUR" },
+      "itemWebUrl": "https://www.ebay.fr/itm/222222222222"
+    },
+    {
+      "itemId": "v1|333333333333|0",
+      "title": "Item sans prix (offre sur demande, doit être filtré)",
+      "itemWebUrl": "https://www.ebay.fr/itm/333333333333"
+    }
+  ]
+}
