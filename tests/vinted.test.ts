@@ -5,12 +5,23 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { searchVinted, decodeJwtExpiry, COLLECTIBLE_CARDS_CATALOG_ID } from "../src/vinted.js";
+import { searchVinted, decodeJwtExpiry, isRelevantToQuery } from "../src/vinted.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const searchFixture = JSON.parse(
   readFileSync(join(__dirname, "fixtures/vinted-search-response.json"), "utf-8")
+);
+
+interface RelevanceFixture {
+  title: string;
+  query: string;
+  expected: boolean;
+  note: string;
+}
+
+const relevanceFixtures: RelevanceFixture[] = JSON.parse(
+  readFileSync(join(__dirname, "fixtures/vinted-relevance.json"), "utf-8")
 );
 
 // Construit un faux JWT (header.payload.signature, non signé) juste pour exercer le
@@ -58,7 +69,9 @@ test("searchVinted - construit la requête avec les bons paramètres et mappe la
     assert.equal(calls.length, 1);
     const requestUrl = new URL(calls[0].url);
     assert.equal(requestUrl.searchParams.get("search_text"), "Pokémon Nuit Noire");
-    assert.equal(requestUrl.searchParams.get("catalog_ids"), COLLECTIBLE_CARDS_CATALOG_ID);
+    // Pas de catalog_ids : vérifié empiriquement que ce paramètre fait ignorer search_text
+    // par l'API Vinted réelle (voir commentaire dans src/vinted.ts).
+    assert.equal(requestUrl.searchParams.has("catalog_ids"), false);
     assert.equal(requestUrl.searchParams.get("order"), "newest_first");
     assert.equal(requestUrl.searchParams.get("per_page"), "50");
 
@@ -78,12 +91,67 @@ test("searchVinted - construit la requête avec les bons paramètres et mappe la
     });
     assert.deepEqual(items[1], {
       itemId: "4455667799",
-      title: "Carte Mew ex carte française",
+      title: "Mew ex 205 Nuit Noire carte française",
       price: 9,
       currency: "EUR",
       url: "https://www.vinted.fr/items/4455667799-carte-mew-ex",
       imageUrl: null, // pas de champ "photo" dans la fixture -> null
     });
+  });
+});
+
+test("searchVinted - envoie bien la query dans le paramètre search_text (et rien d'autre en catalog_ids)", async () => {
+  const query = "display Nuit Noire ME05 36 boosters";
+
+  await withMockedFetch([() => Response.json(searchFixture)], async (calls) => {
+    await searchVinted(query);
+
+    const requestUrl = new URL(calls[0].url);
+    assert.equal(requestUrl.searchParams.get("search_text"), query);
+    assert.equal(requestUrl.searchParams.has("catalog_ids"), false);
+  });
+});
+
+test("isRelevantToQuery - fixtures issues d'observations réelles (Vinted ne renvoie jamais un résultat vide)", () => {
+  for (const { title, query, expected, note } of relevanceFixtures) {
+    const got = isRelevantToQuery(title, query);
+    assert.equal(
+      got,
+      expected,
+      `titre="${title}" query="${query}" (${note}) -> attendu ${expected}, obtenu ${got}`
+    );
+  }
+});
+
+test("searchVinted - filtre les résultats hors-sujet renvoyés par le fallback Vinted", async () => {
+  const mixedResponse = {
+    items: [
+      {
+        id: 1,
+        title: "Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR",
+        price: { amount: "180.00", currency_code: "EUR" },
+        url: "https://www.vinted.fr/items/1-display-nuit-noire",
+      },
+      {
+        id: 2,
+        title: "Carte One Piece - Case de 24 Blister One Piece OP15",
+        price: { amount: "190.00", currency_code: "EUR" },
+        url: "https://www.vinted.fr/items/2-one-piece",
+      },
+      {
+        id: 3,
+        title: "Table de mixage, Yamaha MG 10/2",
+        price: { amount: "120.00", currency_code: "EUR" },
+        url: "https://www.vinted.fr/items/3-table-mixage",
+      },
+    ],
+  };
+
+  await withMockedFetch([() => Response.json(mixedResponse)], async () => {
+    const items = await searchVinted("display Nuit Noire ME05 36 boosters");
+
+    assert.equal(items.length, 1);
+    assert.equal(items[0].itemId, "1");
   });
 });
 
@@ -115,7 +183,9 @@ test("searchVinted - se rétablit après une erreur 5xx transitoire", async () =
   await withMockedFetch(
     [() => new Response("server error", { status: 502 }), () => Response.json(searchFixture)],
     async (calls) => {
-      const items = await searchVinted("Dracaufeu ex", 50, 3, 5);
+      // Query cohérente avec le contenu de la fixture (voir isRelevantToQuery) : les deux
+      // items de tests/fixtures/vinted-search-response.json parlent de "Nuit Noire".
+      const items = await searchVinted("Pokémon Nuit Noire", 50, 3, 5);
 
       assert.equal(calls.length, 2);
       assert.equal(items.length, 2);

@@ -12,11 +12,6 @@ export type VintedItem = MarketplaceItem;
 // navigateur réalistes -> voir renderRenewalInstructions ci-dessous.
 const SEARCH_URL = "https://www.vinted.fr/api/v2/catalog/items";
 
-// Id de catégorie Vinted "Cartes à collectionner" (Loisirs créatifs > Jeux, jouets).
-// A confirmer/ajuster en inspectant les requêtes réseau du site (onglet Network) si les
-// résultats remontent hors-catégorie : l'arborescence des catalog_ids peut changer côté Vinted.
-export const COLLECTIBLE_CARDS_CATALOG_ID = "3025";
-
 // En-têtes imitant un navigateur classique. Ça n'annule pas une éventuelle protection
 // anti-bot côté Vinted, mais évite les rejets triviaux liés à l'absence de User-Agent / Referer.
 const BROWSER_HEADERS = {
@@ -34,6 +29,56 @@ const RENEWAL_INSTRUCTIONS =
 
 function isBlockedStatus(status: number): boolean {
   return status === 403 || status === 429;
+}
+
+// L'API Vinted ne renvoie JAMAIS un résultat vide : une recherche sans aucune annonce
+// pertinente (constaté même avec une requête absurde du type "xyzxyzxyz gibberish") fait
+// quand même remonter du contenu générique/sans rapport plutôt qu'un tableau vide. C'est
+// particulièrement visible sur des requêtes très spécifiques (variantes rares : SAR, AR,
+// Gold...) qui n'ont peu ou pas d'annonces actives. search_text filtre donc correctement
+// quand des résultats pertinents existent, mais ne garantit rien quand ce n'est pas le cas
+// -> on filtre nous-mêmes les résultats a posteriori sur la pertinence du titre.
+const STOPWORDS = new Set([
+  "fr",
+  "française",
+  "francaise",
+  "vf",
+  "carte",
+  "cartes",
+  "de",
+  "des",
+  "le",
+  "la",
+  "du",
+  "et",
+]);
+
+function normalizeForMatch(text: string): string {
+  // NFD + suppression des diacritiques : "Mûre" et "mure" doivent matcher pareil.
+  return text
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+}
+
+function significantQueryWords(query: string): string[] {
+  return normalizeForMatch(query)
+    .split(/[^a-z0-9]+/)
+    .filter((word) => word.length >= 3 && !STOPWORDS.has(word));
+}
+
+// Un titre est jugé pertinent s'il contient au moins la moitié (arrondi au-dessus) des mots
+// significatifs de la requête. Évite de rejeter sur un seul mot manquant (accord, abréviation
+// différente) tout en filtrant le contenu générique renvoyé par le fallback de Vinted.
+export function isRelevantToQuery(title: string, query: string): boolean {
+  const words = significantQueryWords(query);
+  if (words.length === 0) return true;
+
+  const normalizedTitle = normalizeForMatch(title);
+  const matches = words.filter((word) => normalizedTitle.includes(word));
+  const requiredMatches = Math.max(1, Math.ceil(words.length / 2));
+
+  return matches.length >= requiredMatches;
 }
 
 // access_token_web est un JWT. On décode juste son payload (aucune vérif de signature :
@@ -88,9 +133,15 @@ export async function searchVinted(
     headers.Cookie = `access_token_web=${accessTokenWeb}`;
   }
 
+  // IMPORTANT: pas de catalog_ids ici. Un id de catégorie "Cartes à collectionner" a été
+  // deviné (3025) puis vérifié empiriquement contre l'API réelle : dès qu'un catalog_ids
+  // est présent, Vinted ignore silencieusement search_text et renvoie les annonces les
+  // plus récentes de cette catégorie (souvent hors-sujet : consoles, figurines...) au lieu
+  // d'une erreur ou d'un résultat vide. search_text seul, lui, filtre correctement (vérifié
+  // sur des requêtes réelles : "iphone", "carte pokemon", "display Nuit Noire ME05 36
+  // boosters" retournent toutes des résultats pertinents sans catalog_ids).
   const url = new URL(SEARCH_URL);
   url.searchParams.set("search_text", query);
-  url.searchParams.set("catalog_ids", COLLECTIBLE_CARDS_CATALOG_ID);
   url.searchParams.set("order", "newest_first");
   url.searchParams.set("per_page", String(limit));
 
@@ -116,7 +167,7 @@ export async function searchVinted(
   const data = (await res.json()) as VintedApiResponse;
 
   return (data.items ?? [])
-    .filter((item) => item.price)
+    .filter((item) => item.price && isRelevantToQuery(item.title, query))
     .map((item) => ({
       itemId: String(item.id),
       title: item.title,

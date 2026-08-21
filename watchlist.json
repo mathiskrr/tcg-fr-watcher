@@ -1,26 +1,98 @@
 [
   {
-    "name": "Dracaufeu ex",
-    "set": "Écarlate et Violet 151",
-    "ebayQuery": "Dracaufeu ex 199 carte française",
-    "vintedQuery": "Dracaufeu ex 199 carte française"
+    "name": "Display Nuit Noire (36 boosters)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "display Nuit Noire ME05 36 boosters française",
+    "vintedQuery": "display Nuit Noire ME05 36 boosters"
   },
   {
-    "name": "Mew ex",
-    "set": "Écarlate et Violet 151",
-    "ebayQuery": "Mew ex 205 carte française",
-    "vintedQuery": "Mew ex 205 carte française"
+    "name": "Demi-display Nuit Noire (18 boosters)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "demi display Nuit Noire ME05 18 boosters française",
+    "vintedQuery": "demi display Nuit Noire ME05 18 boosters"
   },
   {
-    "name": "Pikachu Illustrator (proxy exemple)",
-    "set": "Promo",
-    "ebayQuery": "Pikachu carte française promo",
-    "vintedQuery": "Pikachu carte française promo"
+    "name": "ETB Nuit Noire",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "ETB coffret dresseur elite Nuit Noire ME05 française",
+    "vintedQuery": "ETB Nuit Noire ME05"
   },
   {
-    "name": "Exemple set vintage (Nuit Noire)",
-    "set": "Nuit Noire",
-    "ebayQuery": "Pokemon Nuit Noire carte française",
-    "vintedQuery": "Pokémon Nuit Noire"
+    "name": "Bundle 6 boosters Nuit Noire",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "bundle 6 boosters Nuit Noire ME05 française",
+    "vintedQuery": "bundle 6 boosters Nuit Noire ME05"
+  },
+  {
+    "name": "Tripack Nuit Noire",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "tripack Nuit Noire ME05 française",
+    "vintedQuery": "tripack Nuit Noire ME05"
+  },
+  {
+    "name": "Booster Nuit Noire (unité)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "booster Nuit Noire ME05 française",
+    "vintedQuery": "booster Nuit Noire ME05"
+  },
+  {
+    "name": "Méga-Darkrai-ex 048/084 (base)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Mega Darkrai ex 048/084 Nuit Noire carte française",
+    "vintedQuery": "Mega Darkrai ex 048/084 Nuit Noire"
+  },
+  {
+    "name": "Méga-Darkrai-ex 101/084 (AR)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Mega Darkrai ex 101/084 Nuit Noire carte française",
+    "vintedQuery": "Mega Darkrai ex 101/084 Nuit Noire"
+  },
+  {
+    "name": "Méga-Darkrai-ex 116/084 (SAR)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Mega Darkrai ex 116/084 Nuit Noire carte française",
+    "vintedQuery": "Mega Darkrai ex 116/084 Nuit Noire"
+  },
+  {
+    "name": "Méga-Darkrai-ex 120/084 (Gold/secrète)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Mega Darkrai ex 120/084 Nuit Noire or carte française",
+    "vintedQuery": "Mega Darkrai ex 120/084 Nuit Noire gold"
+  },
+  {
+    "name": "Méga-Zeraora-ex 114/084",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Mega Zeraora ex 114/084 Nuit Noire carte française",
+    "vintedQuery": "Mega Zeraora ex 114/084 Nuit Noire"
+  },
+  {
+    "name": "Méga-Lugulabre-ex 115/084",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Mega Lugulabre ex 115/084 Nuit Noire carte française",
+    "vintedQuery": "Mega Lugulabre ex 115/084 Nuit Noire"
+  },
+  {
+    "name": "Zarude Full Art (promo ETB)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Zarude promo ETB Nuit Noire ME05 carte française",
+    "vintedQuery": "Zarude promo ETB Nuit Noire"
+  },
+  {
+    "name": "Morpeko ex SAR",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Morpeko ex SAR Nuit Noire ME05 carte française",
+    "vintedQuery": "Morpeko ex SAR Nuit Noire"
+  },
+  {
+    "name": "Gladio SAR",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Gladio SAR Nuit Noire ME05 carte française",
+    "vintedQuery": "Gladio SAR Nuit Noire"
+  },
+  {
+    "name": "Mûre SAR",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Mure SAR Nuit Noire ME05 carte française",
+    "vintedQuery": "Mure SAR Nuit Noire"
   }
 ]

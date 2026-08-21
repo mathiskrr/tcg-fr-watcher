@@ -1,0 +1,50 @@
+[
+  {
+    "title": "Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR",
+    "query": "display Nuit Noire ME05 36 boosters",
+    "expected": true,
+    "note": "annonce reelle pertinente pour la requete"
+  },
+  {
+    "title": "Carte Pokémon Combat Final de Gladio ar sar alt pbl 118/084 nuit noir français fr",
+    "query": "Gladio SAR Nuit Noire",
+    "expected": true,
+    "note": "annonce reelle pertinente malgre 'noir' au lieu de 'noire' (accord)"
+  },
+  {
+    "title": "Mure sar nuit noire me05 super carte",
+    "query": "Mûre SAR Nuit Noire ME05",
+    "expected": true,
+    "note": "accents normalises : Mure/Mûre doivent matcher"
+  },
+  {
+    "title": "Carte One Piece - Case de 24 Blister One Piece OP15",
+    "query": "display Nuit Noire ME05 36 boosters",
+    "expected": false,
+    "note": "annonce reelle hors-sujet observee en production (fallback Vinted)"
+  },
+  {
+    "title": "VTech Ordiyeno",
+    "query": "Gladio SAR Nuit Noire",
+    "expected": false,
+    "note": "annonce reelle totalement hors-sujet (fallback Vinted sur requete peu populee)"
+  },
+  {
+    "title": "Baronne de Fleur RA01-FR034",
+    "query": "Mûre SAR Nuit Noire ME05",
+    "expected": false,
+    "note": "carte d'un autre jeu (Yu-Gi-Oh), aucun mot-cle en commun"
+  },
+  {
+    "title": "Case scelé de deck World Championship 2025",
+    "query": "demi display Nuit Noire ME05 18 boosters",
+    "expected": false,
+    "note": "produit TCG generique sans rapport avec la requete"
+  },
+  {
+    "title": "XG Woke Up",
+    "query": "xyzxyzxyz nonexistent gibberish query 999",
+    "expected": false,
+    "note": "requete absurde : Vinted ne renvoie jamais un tableau vide, le filtre doit rejeter"
+  }
+]
