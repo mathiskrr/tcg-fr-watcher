@@ -10,24 +10,37 @@ mkdirSync(dirname(config.dbPath), { recursive: true });
 const db = new DatabaseSync(config.dbPath);
 db.exec("PRAGMA journal_mode = WAL;");
 
+// L'ancien modèle "seen_items" (dédup par item individuel) est abandonné au profit d'une
+// comparaison de classement : on ne stocke plus que le dernier top 3 réellement envoyé par
+// entrée+source, pour savoir si le classement a changé d'un cycle à l'autre (voir
+// scheduler.ts). Table héritée nettoyée si présente (base de dev locale, pas de migration
+// de données à préserver).
 db.exec(`
-  CREATE TABLE IF NOT EXISTS seen_items (
-    item_id TEXT PRIMARY KEY,
-    title TEXT NOT NULL,
-    price REAL NOT NULL,
-    seen_at INTEGER NOT NULL
+  DROP TABLE IF EXISTS seen_items;
+
+  CREATE TABLE IF NOT EXISTS last_alerted_top3 (
+    entry_key TEXT PRIMARY KEY,
+    item_ids TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
   );
 `);
 
-export function hasSeenItem(itemId: string): boolean {
-  const row = db.prepare("SELECT 1 FROM seen_items WHERE item_id = ?").get(itemId);
-  return row !== undefined;
+// item_ids : ids triés puis joints par virgule -> comparaison directe possible côté
+// scheduler.ts sans requête SQL supplémentaire (le tri se fait à l'écriture).
+export function getLastAlertedTop3(entryKey: string): string[] | null {
+  const row = db.prepare("SELECT item_ids FROM last_alerted_top3 WHERE entry_key = ?").get(entryKey) as
+    | { item_ids: string }
+    | undefined;
+
+  if (!row) return null;
+  return row.item_ids.split(",");
 }
 
-export function markItemSeen(itemId: string, title: string, price: number): void {
+export function setLastAlertedTop3(entryKey: string, itemIds: string[]): void {
+  const sorted = [...itemIds].sort().join(",");
   db.prepare(
-    "INSERT OR REPLACE INTO seen_items (item_id, title, price, seen_at) VALUES (?, ?, ?, ?)"
-  ).run(itemId, title, price, Date.now());
+    "INSERT OR REPLACE INTO last_alerted_top3 (entry_key, item_ids, updated_at) VALUES (?, ?, ?)"
+  ).run(entryKey, sorted, Date.now());
 }
 
 export default db;

@@ -1,17 +1,24 @@
 # tcg-fr-watcher
 
-Bot de veille pour les nouvelles annonces de cartes Pokémon **en français** sur eBay et
+Bot de veille pour les annonces de cartes/produits Pokémon **en français** sur eBay et
 Vinted, avec alertes envoyées sur Discord via webhook.
 
-Toutes les 10 minutes (configurable), le bot :
+Toutes les 10 minutes (configurable), le bot, pour chaque entrée de la watchlist et chaque
+source activée :
 
-1. Recherche chaque carte de la `watchlist.json` sur eBay (Browse API) et Vinted (endpoint interne).
-2. Filtre les annonces pour ne garder que celles dont le titre indique une carte **française**
-   (exclut explicitement EN/JP/DE/IT/ES).
-3. Poste une alerte Discord (image, titre, prix, lien) pour **toute** annonce FR non déjà vue —
-   pas de comparaison de prix, pas de notion de "bonne affaire" : c'est un flux brut de nouvelles
-   annonces.
-4. Marque l'annonce comme vue en base pour ne jamais la reposter.
+1. Recherche l'entrée sur eBay (Browse API) et/ou Vinted (endpoint interne).
+2. Filtre les résultats pour ne garder que ceux dont le titre indique un produit **français**
+   (exclut explicitement EN/JP/DE/IT/ES, abréviations isolées EN/ENG/GB/UK et drapeaux
+   emoji 🇬🇧🇺🇸🇯🇵🇩🇪🇮🇹🇪🇸), et, pour les entrées de type produit scellé (Display, ETB, Bundle,
+   Tripack, Booster), exclut aussi les annonces indiquant un produit ouvert, incomplet,
+   reconditionné ou d'occasion, et exige le bon type de produit dans le titre (pas juste un
+   chevauchement de mots-clés — une "carte promo ETB" n'est pas un ETB).
+3. Recalcule intégralement le **top 3 des moins chères** parmi tous les résultats filtrés du
+   cycle (par source — 3 eBay + 3 Vinted, classements indépendants).
+4. Si la **composition** de ce top 3 a changé depuis le dernier envoi pour cette entrée+source
+   (une annonce différente y est entrée ou en est sortie — l'ordre entre les 3 ou leur rang de
+   prix exact n'est pas pris en compte), poste les 3 alertes Discord **en entier** (pas
+   seulement la différence). Sinon, rien n'est envoyé ce cycle-là.
 
 Chaque source (eBay, Vinted) est interrogée indépendamment par entrée de la watchlist : un
 incident sur l'une (clé eBay pas encore approuvée, Vinted qui bloque une requête, etc.) est
@@ -129,7 +136,7 @@ src/
   types.ts      # MarketplaceItem : forme commune des annonces (eBay, Vinted, ...)
   ebay.ts       # client eBay Browse API (OAuth2 client credentials)
   vinted.ts     # client Vinted (endpoint interne catalog/items, retry sur 403/429)
-  db.ts         # SQLite (node:sqlite) : seen_items (dédup)
+  db.ts         # SQLite (node:sqlite) : last_alerted_top3 (dernier top 3 envoyé par entrée+source)
   discord.ts    # envoi webhook (embed titre/prix/lien/image)
   matcher.ts    # filtre langue FR (regex titre + exclusions), 2 modes selon la source
   http.ts       # fetch avec retry (backoff linéaire, prédicat de statut retryable configurable)
@@ -137,10 +144,11 @@ src/
   index.ts      # entrypoint
 tests/
   env.ts                  # variables d'env factices, importées en premier par les tests qui touchent config.ts
-  matcher.test.ts          # isFrenchTitle() (modes strict + assume-french), fixtures/titles*.json
+  matcher.test.ts          # isFrenchTitle() (modes strict + assume-french) + isSealed(), fixtures/titles*.json
   discord.test.ts          # sendNewListingAlert() avec fetch mocké, contre tests/fixtures/listing-items.json
   ebay.test.ts              # OAuth + Browse API mockés, contre tests/fixtures/ebay-*.json
   vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
+  scheduler.test.ts          # selectCheapestN, hasTop3Changed, isSealedProductEntry (fonctions pures)
   fixtures/*.json            # jeux de données des tests
 ```
 
@@ -171,7 +179,32 @@ la même chose selon la plateforme :
   d'une **autre** langue (EN/JP/DE/IT/ES...) fait rejeter l'annonce.
 
 Dans les deux modes, une mention explicite de langue (française ou étrangère) est traitée
-identiquement — seul le comportement par défaut en l'absence d'indice change.
+identiquement — seul le comportement par défaut en l'absence d'indice change. `isFrenchTitle`
+rejette aussi les abréviations isolées `EN`/`ENG`/`GB`/`UK` et les drapeaux emoji
+🇬🇧🇺🇸🇯🇵🇩🇪🇮🇹🇪🇸. `EN` n'est traité comme tag de langue qu'en **majuscules isolées** (sensible à
+la casse) : "en" minuscule est une préposition française bien trop courante ("carte **en**
+parfait état") pour servir de signal fiable.
+
+## Top 3 le moins cher + anti-spam (scheduler.ts)
+
+Pour chaque entrée de la watchlist et chaque source, `alertCheapestForSource` :
+
+1. Recalcule le top `TOP_N_PER_ENTRY` (3) le moins cher sur **tous** les résultats FR du
+   cycle (`selectCheapestN`), pas seulement les nouveaux.
+2. Compare la **composition** de ce top 3 (l'ensemble des ids, indépendamment de l'ordre) au
+   dernier top 3 réellement envoyé pour cette entrée+source, stocké dans
+   `last_alerted_top3` (`hasTop3Changed`).
+3. Si elle a changé (une annonce différente y est entrée ou en est sortie), poste les 3
+   alertes **en entier**. Si c'est exactement le même trio qu'au dernier envoi — même
+   réordonné entre eux par le prix — rien n'est renvoyé.
+
+`last_alerted_top3` ne sert donc plus à "avoir déjà vu cet item" (ancien modèle `seen_items`,
+abandonné) mais uniquement à détecter un changement de composition du top 3 d'un cycle à
+l'autre. Les entrées "produit scellé" (Display, ETB, Bundle, Tripack, Booster — reconnues
+par leur `name` dans `watchlist.json`, voir `isSealedProductEntry`) filtrent en plus les
+annonces ouvertes/incomplètes/reconditionnées/d'occasion (`isSealed`) et exigent le bon type
+de produit dans le titre côté `vinted.ts` (`isRelevantToQuery`), pas juste un chevauchement
+de mots-clés.
 
 ## Limitations connues (V2)
 
@@ -181,9 +214,9 @@ identiquement — seul le comportement par défaut en l'absence d'indice change.
   automatique — cela nécessiterait de gérer un `refresh_token_web` et un flux de refresh, hors
   scope volontairement pour rester simple).
 - Les `itemId` sont propres à chaque marketplace et ne sont donc pas garantis uniques entre eBay
-  et Vinted : `scheduler.ts` préfixe la clé de dédup par source (`ebay:...` / `vinted:...`) dans
-  `seen_items` pour éviter toute collision.
-- Pas de comparaison de prix ni de notion de "bonne affaire" : le bot poste toute nouvelle
-  annonce FR détectée, sans filtre sur le prix. Une watchlist trop large peut donc générer
-  beaucoup d'alertes Discord.
+  et Vinted : `scheduler.ts` préfixe la clé (`ebay:...` / `vinted:...`) pour éviter toute collision
+  dans le top 3 stocké.
+- Le top 3 n'est comparé que par composition (quels items en font partie), pas par prix ou
+  rang exact : si une annonce du top 3 change de prix sans en sortir, aucune alerte n'est
+  renvoyée (comportement voulu, voir section ci-dessus).
 - Leboncoin (anti-bot Datadome) n'est pas implémenté — prévu pour une V3 si nécessaire.

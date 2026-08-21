@@ -4,7 +4,7 @@ import { config } from "./config.js";
 import { searchEbay } from "./ebay.js";
 import { searchVinted } from "./vinted.js";
 import { isFrenchTitle, isSealed, type LanguageFilterMode } from "./matcher.js";
-import { hasSeenItem, markItemSeen } from "./db.js";
+import { getLastAlertedTop3, setLastAlertedTop3 } from "./db.js";
 import { sendNewListingAlert } from "./discord.js";
 import type { MarketplaceItem } from "./types.js";
 
@@ -16,14 +16,17 @@ export interface WatchlistEntry {
   vintedQuery?: string | null;
 }
 
-// Chaque cycle remonte systématiquement les TOP_N_PER_ENTRY annonces FR les moins
-// chères actuellement disponibles pour l'entrée — pas seulement les nouvelles : le
-// classement se recalcule intégralement à chaque cycle sur l'ensemble des résultats.
-// La dédup via seen_items sert uniquement à ne pas ré-alerter une annonce déjà notifiée
-// (ex: elle reste dans le top 3 d'un cycle à l'autre).
+// Chaque cycle recalcule intégralement les TOP_N_PER_ENTRY annonces FR les moins chères
+// actuellement disponibles pour l'entrée, sur l'ensemble des résultats du cycle (pas de
+// dédup par item individuel). Anti-spam : on ne (ré)envoie les 3 alertes que si la
+// COMPOSITION du top 3 a changé depuis le dernier envoi pour cette entrée+source (un item
+// différent y entre ou en sort) — voir hasTop3Changed / db.ts last_alerted_top3. Si le top 3
+// est identique au dernier envoi (mêmes 3 items, peu importe l'ordre ou leur rang de prix
+// exact entre eux), rien n'est renvoyé ce cycle-là.
 // Le classement est fait PAR SOURCE (3 moins chères eBay + 3 moins chères Vinted,
-// séparément) et non sur un pool combiné : les deux marketplaces ont des dynamiques de
-// prix différentes, mélanger reviendrait à laisser l'une éclipser systématiquement l'autre.
+// séparément, avec leur propre "dernier top 3 envoyé") et non sur un pool combiné : les deux
+// marketplaces ont des dynamiques de prix différentes, mélanger reviendrait à laisser l'une
+// éclipser systématiquement l'autre.
 const TOP_N_PER_ENTRY = 3;
 
 function loadWatchlist(): WatchlistEntry[] {
@@ -48,17 +51,30 @@ async function fetchSourceItems(
 
 export interface Candidate {
   source: string;
-  seenKey: string;
+  itemKey: string;
   item: MarketplaceItem;
   reason: string;
 }
 
 // Fonction pure (pas d'I/O) pour rester testable isolément, sans dépendre de config.ts /
 // db.ts / du réseau comme le reste de scheduler.ts. Trie par prix croissant et ne retient
-// que les `n` moins chères, indépendamment de leur statut "vu" ou non — ce filtrage-là est
-// fait séparément, après coup, par l'appelant (voir checkEntry).
+// que les `n` moins chères.
 export function selectCheapestN(items: Candidate[], n: number): Candidate[] {
   return [...items].sort((a, b) => a.item.price - b.item.price).slice(0, n);
+}
+
+// Fonction pure : compare le top N courant (ids) au dernier top N réellement envoyé pour
+// cette entrée+source. Comparaison en ENSEMBLE : seule la composition du top 3 compte (quels
+// items en font partie), pas l'ordre entre eux ni leur rang de prix exact — un même trio
+// d'items, même reclassé entre eux par le prix, ne redéclenche pas d'envoi. Un item qui
+// entre ou sort du top 3 (nouvelle annonce moins chère, annonce vendue...) déclenche un envoi.
+// `lastIds === null` (jamais envoyé pour cette entrée+source) compte toujours comme changé.
+export function hasTop3Changed(currentIds: string[], lastIds: string[] | null): boolean {
+  if (lastIds === null) return true;
+  if (currentIds.length !== lastIds.length) return true;
+
+  const lastSet = new Set(lastIds);
+  return !currentIds.every((id) => lastSet.has(id));
 }
 
 // Entrées watchlist représentant un produit scellé (par opposition à une carte à l'unité) :
@@ -70,8 +86,9 @@ export function isSealedProductEntry(entryName: string): boolean {
 }
 
 // Filtre langue (+ produit scellé le cas échéant) sur TOUS les résultats d'une source pour
-// un cycle (pas de dédup ici : le top N doit se recalculer à chaque cycle sur tous les
-// résultats, vus ou non).
+// un cycle : le top N se recalcule à chaque cycle sur l'ensemble des résultats, sans dédup
+// par item individuel (voir alertCheapestForSource pour la logique anti-spam au niveau du
+// top 3 dans son ensemble).
 function filterFrenchMatches(
   source: string,
   mode: LanguageFilterMode,
@@ -89,35 +106,44 @@ function filterFrenchMatches(
     // annonce indiquant explicitement que le produit est ouvert/incomplet est écartée.
     if (requireSealed && !isSealed(item.title)) continue;
 
-    // Les itemId sont propres à chaque marketplace : on les préfixe par source pour
-    // éviter qu'un id Vinted et un id eBay identiques ne se marquent l'un l'autre "vu".
-    matches.push({ source, seenKey: `${source}:${item.itemId}`, item, reason });
+    // Les itemId sont propres à chaque marketplace : on les préfixe par source pour éviter
+    // qu'un id Vinted et un id eBay identiques ne soient confondus dans le top 3 stocké.
+    matches.push({ source, itemKey: `${source}:${item.itemId}`, item, reason });
   }
   return matches;
 }
 
-// Calcule et envoie les alertes pour UNE source : top N moins chères parmi tous ses
-// résultats du cycle, puis dédup via seen_items pour ne (re)notifier que les nouvelles.
+// Calcule le top N moins chères pour UNE source et n'envoie les alertes que si sa
+// composition a changé depuis le dernier envoi pour cette entrée+source (voir
+// hasTop3Changed). Si elle a changé, les N alertes sont renvoyées EN ENTIER (pas seulement
+// la différence), pour toujours voir les N vraies moins chères ensemble dans Discord.
 async function alertCheapestForSource(entryName: string, source: string, matches: Candidate[]): Promise<void> {
   if (matches.length === 0) return;
 
   const cheapest = selectCheapestN(matches, TOP_N_PER_ENTRY);
-  const toAlert = cheapest.filter((c) => !hasSeenItem(c.seenKey));
-  const alreadyAlerted = cheapest.length - toAlert.length;
+  const entryKey = `${source}:${entryName}`;
+  const currentIds = cheapest.map((c) => c.itemKey);
+  const lastIds = getLastAlertedTop3(entryKey);
+
+  if (!hasTop3Changed(currentIds, lastIds)) {
+    console.log(`[scheduler] top ${cheapest.length} (${source}) inchangé pour ${entryName}, aucune alerte`);
+    return;
+  }
 
   console.log(
-    `[scheduler] ${matches.length} annonce(s) FR (${source}) pour ${entryName}, top ${cheapest.length} moins chère(s) : ${toAlert.length} nouvelle(s) alerte(s), ${alreadyAlerted} déjà alertée(s) précédemment`
+    `[scheduler] top ${cheapest.length} (${source}) modifié pour ${entryName} — envoi des ${cheapest.length} alertes`
   );
 
-  for (const { seenKey, item, reason } of toAlert) {
-    console.log(`[scheduler] nouvelle annonce (${source}): "${item.title}" à ${item.price}€ (${reason})`);
+  for (const { itemKey, item, reason } of cheapest) {
+    console.log(`[scheduler] annonce du top ${cheapest.length} (${source}): "${item.title}" à ${item.price}€ (${reason})`);
     try {
       await sendNewListingAlert(item);
     } catch (err) {
-      console.error(`[scheduler] échec envoi Discord pour ${seenKey}:`, err);
+      console.error(`[scheduler] échec envoi Discord pour ${itemKey}:`, err);
     }
-    markItemSeen(seenKey, item.title, item.price);
   }
+
+  setLastAlertedTop3(entryKey, currentIds);
 }
 
 async function checkEntry(entry: WatchlistEntry): Promise<void> {

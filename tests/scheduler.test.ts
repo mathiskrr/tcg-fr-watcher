@@ -2,7 +2,7 @@ import "./env.js"; // doit rester le premier import : peuple process.env avant q
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectCheapestN, isSealedProductEntry, type Candidate } from "../src/scheduler.js";
+import { selectCheapestN, hasTop3Changed, isSealedProductEntry, type Candidate } from "../src/scheduler.js";
 import type { MarketplaceItem } from "../src/types.js";
 
 function makeCandidate(itemId: string, price: number, source = "vinted"): Candidate {
@@ -14,7 +14,7 @@ function makeCandidate(itemId: string, price: number, source = "vinted"): Candid
     url: `https://example.test/${itemId}`,
     imageUrl: null,
   };
-  return { source, seenKey: `${source}:${itemId}`, item, reason: "test" };
+  return { source, itemKey: `${source}:${itemId}`, item, reason: "test" };
 }
 
 test("selectCheapestN - sous le seuil, renvoie tout, trié par prix croissant", () => {
@@ -58,55 +58,6 @@ test("selectCheapestN - ne modifie pas le tableau passé en entrée", () => {
   );
 });
 
-test("selectCheapestN - se recalcule sur l'ensemble des résultats, pas seulement les nouveaux (via un scénario 2 cycles)", () => {
-  // Simule le comportement attendu au niveau de checkEntry : le classement "top N moins
-  // chères" est recalculé sur TOUS les résultats du cycle, la dédup (seen_items) étant
-  // appliquée ensuite, séparément, uniquement pour décider quoi (re)alerter.
-  const seen = new Set<string>();
-
-  // Cycle 1 : 5 annonces disponibles.
-  const cycle1 = [
-    makeCandidate("a", 10),
-    makeCandidate("b", 20),
-    makeCandidate("c", 30),
-    makeCandidate("d", 40),
-    makeCandidate("e", 50),
-  ];
-  const top1 = selectCheapestN(cycle1, 3);
-  const toAlert1 = top1.filter((c) => !seen.has(c.seenKey));
-  for (const c of toAlert1) seen.add(c.seenKey);
-
-  assert.deepEqual(
-    top1.map((c) => c.item.itemId),
-    ["a", "b", "c"]
-  );
-  assert.deepEqual(
-    toAlert1.map((c) => c.item.itemId),
-    ["a", "b", "c"]
-  ); // tout est nouveau au 1er cycle
-
-  // Cycle 2 : "a" a disparu (vendue), une nouvelle annonce "f" à 5€ apparaît moins chère
-  // que tout le reste. "b" et "c" sont toujours là (déjà alertées au cycle 1).
-  const cycle2 = [
-    makeCandidate("f", 5),
-    makeCandidate("b", 20),
-    makeCandidate("c", 30),
-    makeCandidate("d", 40),
-    makeCandidate("e", 50),
-  ];
-  const top2 = selectCheapestN(cycle2, 3);
-  const toAlert2 = top2.filter((c) => !seen.has(c.seenKey));
-
-  assert.deepEqual(
-    top2.map((c) => c.item.itemId),
-    ["f", "b", "c"]
-  ); // recalculé sur l'ensemble des résultats du cycle 2, pas seulement "f" qui est nouveau
-  assert.deepEqual(
-    toAlert2.map((c) => c.item.itemId),
-    ["f"]
-  ); // "b" et "c" déjà alertées au cycle 1 -> pas de re-notification
-});
-
 test("selectCheapestN - classement indépendant par source (checkEntry appelle la fonction une fois par source, pas sur un pool combiné)", () => {
   // eBay nettement plus cher que Vinted sur ce cas : un classement combiné laisserait
   // Vinted éclipser totalement eBay. scheduler.ts appelle donc selectCheapestN séparément
@@ -137,6 +88,93 @@ test("selectCheapestN - classement indépendant par source (checkEntry appelle l
     topVinted.map((c) => c.item.itemId),
     ["v3", "v1", "v2"]
   );
+});
+
+test("hasTop3Changed - jamais envoyé auparavant (lastIds null) -> toujours considéré changé", () => {
+  assert.equal(hasTop3Changed(["a", "b", "c"], null), true);
+});
+
+test("hasTop3Changed - même trio d'ids, même ordre -> pas changé", () => {
+  assert.equal(hasTop3Changed(["a", "b", "c"], ["a", "b", "c"]), false);
+});
+
+test("hasTop3Changed - même trio d'ids, ordre différent -> pas changé (seule la composition compte)", () => {
+  assert.equal(hasTop3Changed(["a", "b", "c"], ["c", "a", "b"]), false);
+});
+
+test("hasTop3Changed - un item différent -> changé", () => {
+  assert.equal(hasTop3Changed(["a", "b", "d"], ["a", "b", "c"]), true);
+});
+
+test("hasTop3Changed - tailles différentes -> changé", () => {
+  assert.equal(hasTop3Changed(["a", "b"], ["a", "b", "c"]), true);
+});
+
+test("scénario 2 cycles : le top 3 se recalcule sur l'ensemble des résultats, l'alerte ne repart que si sa composition change", () => {
+  // Simule le comportement de alertCheapestForSource : le top 3 est recalculé sur TOUS les
+  // résultats du cycle (pas de filtre "déjà vu" en amont), et on ne renvoie les 3 alertes
+  // que si l'ensemble des 3 ids diffère du dernier envoi pour cette entrée+source.
+  let lastAlertedIds: string[] | null = null;
+
+  // Cycle 1 : 5 annonces disponibles, jamais alerté avant -> envoi des 3 moins chères.
+  const cycle1 = [
+    makeCandidate("a", 10),
+    makeCandidate("b", 20),
+    makeCandidate("c", 30),
+    makeCandidate("d", 40),
+    makeCandidate("e", 50),
+  ];
+  const top1 = selectCheapestN(cycle1, 3);
+  const ids1 = top1.map((c) => c.itemKey);
+  const changed1 = hasTop3Changed(ids1, lastAlertedIds);
+  if (changed1) lastAlertedIds = ids1;
+
+  assert.deepEqual(top1.map((c) => c.item.itemId), ["a", "b", "c"]);
+  assert.equal(changed1, true, "1er envoi pour cette entrée -> toujours considéré changé");
+
+  // Cycle 2 : mêmes 5 annonces, rien n'a changé -> le top 3 recalculé est identique -> pas
+  // de nouvel envoi, même si on "recalcule tout" à chaque cycle.
+  const top2 = selectCheapestN(cycle1, 3);
+  const ids2 = top2.map((c) => c.itemKey);
+  const changed2 = hasTop3Changed(ids2, lastAlertedIds);
+
+  assert.deepEqual(top2.map((c) => c.item.itemId), ["a", "b", "c"]);
+  assert.equal(changed2, false, "même top 3 qu'au dernier envoi -> aucune alerte");
+
+  // Cycle 3 : "a" a disparu (vendue), une nouvelle annonce "f" à 5€ apparaît moins chère que
+  // tout le reste -> le top 3 change de composition -> les 3 alertes repartent EN ENTIER
+  // (pas seulement "f").
+  const cycle3 = [
+    makeCandidate("f", 5),
+    makeCandidate("b", 20),
+    makeCandidate("c", 30),
+    makeCandidate("d", 40),
+    makeCandidate("e", 50),
+  ];
+  const top3 = selectCheapestN(cycle3, 3);
+  const ids3 = top3.map((c) => c.itemKey);
+  const changed3 = hasTop3Changed(ids3, lastAlertedIds);
+  if (changed3) lastAlertedIds = ids3;
+
+  assert.deepEqual(top3.map((c) => c.item.itemId), ["f", "b", "c"]);
+  assert.equal(changed3, true, "'a' est sorti du top 3, 'f' y est entré -> composition changée");
+
+  // Cycle 4 : même composition que le cycle 3 mais "c" est maintenant moins cher que "b"
+  // (permutation de prix entre les mêmes 3 items) -> toujours les mêmes 3 ids -> pas de
+  // nouvel envoi (seule la composition du top 3 compte, pas le rang de prix entre eux).
+  const cycle4 = [
+    makeCandidate("f", 5),
+    makeCandidate("b", 35),
+    makeCandidate("c", 15),
+    makeCandidate("d", 40),
+    makeCandidate("e", 50),
+  ];
+  const top4 = selectCheapestN(cycle4, 3);
+  const ids4 = top4.map((c) => c.itemKey);
+  const changed4 = hasTop3Changed(ids4, lastAlertedIds);
+
+  assert.deepEqual(top4.map((c) => c.item.itemId), ["f", "c", "b"]); // "c" et "b" permutés
+  assert.equal(changed4, false, "mêmes 3 items, juste réordonnés par prix -> aucune alerte");
 });
 
 test("isSealedProductEntry - identifie les entrées watchlist de produits scellés par leur nom", () => {
