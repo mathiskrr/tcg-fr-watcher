@@ -113,3 +113,67 @@ test("sendNewListingAlert - espace les envois consécutifs d'au moins minInterva
     }
   );
 });
+
+function rateLimitedResponse(retryAfterSeconds: number): Response {
+  return Response.json({ message: "rate limited", retry_after: retryAfterSeconds, global: false }, { status: 429 });
+}
+
+test("sendNewListingAlert - sur 429, attend exactement retry_after (indiqué par Discord) puis retente une fois", async (t) => {
+  const warnSpy = t.mock.method(console, "warn", () => {});
+  const retryAfterSeconds = 0.08; // 80ms, choisi petit pour un test rapide
+
+  let callCount = 0;
+  await withMockedFetch(
+    () => {
+      callCount++;
+      return callCount === 1 ? rateLimitedResponse(retryAfterSeconds) : new Response(null, { status: 204 });
+    },
+    async (calls) => {
+      const start = performance.now();
+      await sendNewListingAlert(fixtures[0], 1);
+      const elapsed = performance.now() - start;
+
+      assert.equal(calls.length, 2, "doit avoir retenté une fois après le 429");
+      assert.ok(
+        elapsed >= retryAfterSeconds * 1000 - 20,
+        `doit avoir attendu ~${retryAfterSeconds * 1000}ms (retry_after), mesuré ${elapsed.toFixed(1)}ms`
+      );
+      assert.equal(warnSpy.mock.callCount(), 1);
+      assert.match(String(warnSpy.mock.calls[0].arguments[0]), /retry_after/i);
+    }
+  );
+});
+
+test("sendNewListingAlert - abandonne (sans 3e essai) si le retry après 429 échoue aussi", async (t) => {
+  const errorSpy = t.mock.method(console, "error", () => {});
+
+  let callCount = 0;
+  await withMockedFetch(
+    () => {
+      callCount++;
+      return rateLimitedResponse(0.01);
+    },
+    async (calls) => {
+      await assert.rejects(() => sendNewListingAlert(fixtures[0], 1), /Envoi webhook Discord échoué: 429/);
+
+      assert.equal(calls.length, 2, "un seul retry doit être tenté, jamais plus");
+      assert.equal(errorSpy.mock.callCount(), 1);
+      assert.match(String(errorSpy.mock.calls[0].arguments[0]), /toujours rate limited/i);
+    }
+  );
+});
+
+test("sendNewListingAlert - abandonne immédiatement (sans retry) si le 429 n'a pas de retry_after exploitable", async (t) => {
+  const errorSpy = t.mock.method(console, "error", () => {});
+
+  await withMockedFetch(
+    () => new Response("pas du JSON", { status: 429 }),
+    async (calls) => {
+      await assert.rejects(() => sendNewListingAlert(fixtures[0], 1), /Envoi webhook Discord échoué: 429/);
+
+      assert.equal(calls.length, 1, "aucun retry sans retry_after exploitable");
+      assert.equal(errorSpy.mock.callCount(), 1);
+      assert.match(String(errorSpy.mock.calls[0].arguments[0]), /sans retry_after exploitable/i);
+    }
+  );
+});
