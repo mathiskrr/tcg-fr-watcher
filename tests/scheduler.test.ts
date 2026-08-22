@@ -2,8 +2,18 @@ import "./env.js"; // doit rester le premier import : peuple process.env avant q
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectCheapestN, hasTop3Changed, type Candidate } from "../src/scheduler.js";
+import {
+  selectCheapestN,
+  hasTop3Changed,
+  vintedQueries,
+  dedupeByItemId,
+  type Candidate,
+} from "../src/scheduler.js";
 import type { MarketplaceItem } from "../src/types.js";
+
+function makeItem(itemId: string, title = `Item ${itemId}`): MarketplaceItem {
+  return { itemId, title, price: 10, currency: "EUR", url: `https://example.test/${itemId}`, imageUrl: null };
+}
 
 function makeCandidate(itemId: string, price: number, source = "vinted"): Candidate {
   const item: MarketplaceItem = {
@@ -88,6 +98,45 @@ test("selectCheapestN - classement indépendant par source (checkEntry appelle l
     topVinted.map((c) => c.item.itemId),
     ["v3", "v1", "v2"]
   );
+});
+
+test("vintedQueries - une chaîne simple devient un tableau à un élément", () => {
+  assert.deepEqual(vintedQueries({ vintedQuery: "display Nuit Noire", ebayQuery: "fallback" }), [
+    "display Nuit Noire",
+  ]);
+});
+
+test("vintedQueries - un tableau de variantes est renvoyé tel quel", () => {
+  // Cas réel : "ME05" et "ME5" cohabitent chez les vendeurs Vinted pour désigner le même set
+  // -> une entrée peut fournir les deux variantes de requête (voir watchlist.json).
+  assert.deepEqual(
+    vintedQueries({ vintedQuery: ["display Nuit Noire ME05", "display Nuit Noire ME5"], ebayQuery: "fallback" }),
+    ["display Nuit Noire ME05", "display Nuit Noire ME5"]
+  );
+});
+
+test("vintedQueries - absente/null -> repli sur ebayQuery", () => {
+  assert.deepEqual(vintedQueries({ vintedQuery: undefined, ebayQuery: "fallback" }), ["fallback"]);
+  assert.deepEqual(vintedQueries({ vintedQuery: null, ebayQuery: "fallback" }), ["fallback"]);
+});
+
+test("dedupeByItemId - fusionne plusieurs listes en retirant les doublons par itemId", () => {
+  // Une même annonce peut matcher deux variantes de requête (ex: une annonce "ME05" trouvée
+  // par la requête "ME05" ET par une requête plus large) -> elle ne doit apparaître qu'une
+  // fois dans le résultat fusionné.
+  const listA = [makeItem("1"), makeItem("2")];
+  const listB = [makeItem("2"), makeItem("3")];
+
+  const merged = dedupeByItemId([listA, listB]);
+
+  assert.deepEqual(
+    merged.map((i) => i.itemId),
+    ["1", "2", "3"]
+  );
+});
+
+test("dedupeByItemId - liste vide de listes -> résultat vide", () => {
+  assert.deepEqual(dedupeByItemId([]), []);
 });
 
 test("hasTop3Changed - jamais envoyé auparavant (lastIds null) -> toujours considéré changé", () => {

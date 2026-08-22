@@ -72,15 +72,16 @@ export function isFrenchTitle(title: string, mode: LanguageFilterMode = "strict"
 
 // Filtre "produit scellé" : rejette une annonce dont le titre indique explicitement que le
 // produit a été ouvert ou est incomplet (ex: un display/ETB/booster vendu ouvert pour en
-// sortir les cartes à l'unité), ou reconditionné/d'occasion (donc pas neuf sous scellé
-// d'origine). Ne s'applique qu'aux entrées watchlist identifiées comme scellées par leur nom
+// sortir les cartes à l'unité), reconditionné/d'occasion (donc pas neuf sous scellé
+// d'origine), ou une simple boîte vide (le contenu a déjà été sorti, ex: "ETB vide"). Ne
+// s'applique qu'aux entrées watchlist identifiées comme scellées par leur nom
 // (Display, ETB, Bundle, Tripack, Booster...) — voir scheduler.ts.
 //
 // Testé sur le titre avec accents supprimés (voir stripAccents) : \b en JS ne traite pas les
 // lettres accentuées comme des caractères de mot, donc "\breconditionné\b" échoue silencieusement
 // quand le match se termine juste sur le "é" (rien après, ex: "reconditionné" en fin de titre) —
 // la transition "é" (non-mot) -> espace (non-mot) n'est jamais une frontière de mot valide.
-const OPENED_PRODUCT_PATTERN = /\b(ouverte?s?|open(ed)?|incomplet(e)?s?|reconditionnee?s?|occasion)\b/i;
+const OPENED_PRODUCT_PATTERN = /\b(ouverte?s?|open(ed)?|incomplet(e)?s?|reconditionnee?s?|occasion|vides?)\b/i;
 
 function stripAccents(text: string): string {
   return text.normalize("NFD").replace(/[̀-ͯ]/g, "");

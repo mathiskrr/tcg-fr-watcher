@@ -3,13 +3,19 @@
     "name": "Display Nuit Noire (36 boosters)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "display Nuit Noire ME05 36 boosters française",
-    "vintedQuery": "display Nuit Noire ME05 36 boosters"
+    "vintedQuery": [
+      "display Nuit Noire ME05 36 boosters",
+      "display Nuit Noire ME5 36 boosters"
+    ]
   },
   {
     "name": "Demi-display Nuit Noire (18 boosters)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "demi display Nuit Noire ME05 18 boosters française",
-    "vintedQuery": "demi display Nuit Noire ME05 18 boosters"
+    "vintedQuery": [
+      "demi display Nuit Noire ME05 18 boosters",
+      "demi display Nuit Noire ME5 18 boosters"
+    ]
   },
   {
     "name": "ETB Nuit Noire",
@@ -31,126 +37,34 @@
   },
 
   {
-    "name": "Mimantis 085/084 (AR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Mimantis 085/084 Nuit Noire carte française",
-    "vintedQuery": "Mimantis 085/084 Nuit Noire"
-  },
-  {
-    "name": "Carmadura 086/084 (AR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Carmadura 086/084 Nuit Noire carte française",
-    "vintedQuery": "Carmadura 086/084 Nuit Noire"
-  },
-  {
     "name": "Poissirène 087/084 (AR)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Poissirene 087/084 Nuit Noire carte française",
     "vintedQuery": "Poissirene 087/084 Nuit Noire"
   },
   {
-    "name": "Oratoria 088/084 (AR)",
+    "name": "Combat Final de Gladio 108/084 (UR)",
     "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Oratoria 088/084 Nuit Noire carte française",
-    "vintedQuery": "Oratoria 088/084 Nuit Noire"
+    "ebayQuery": "Combat Final de Gladio 108/084 Nuit Noire carte française",
+    "vintedQuery": "Combat Final de Gladio 108/084 Nuit Noire"
   },
   {
-    "name": "Élecsprint 089/084 (AR)",
+    "name": "Défense de Fer 110/084 (UR)",
     "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Elecsprint 089/084 Nuit Noire carte française",
-    "vintedQuery": "Elecsprint 089/084 Nuit Noire"
+    "ebayQuery": "Defense de Fer 110/084 Nuit Noire carte française",
+    "vintedQuery": "Defense de Fer 110/084 Nuit Noire"
   },
   {
-    "name": "Flagadoss 090/084 (AR)",
+    "name": "Sbire du Clan Dérouillard 112/084 (UR)",
     "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Flagadoss 090/084 Nuit Noire carte française",
-    "vintedQuery": "Flagadoss 090/084 Nuit Noire"
+    "ebayQuery": "Sbire du Clan Derouillard 112/084 Nuit Noire carte française",
+    "vintedQuery": "Sbire du Clan Derouillard 112/084 Nuit Noire"
   },
   {
-    "name": "Sinistrail 091/084 (AR)",
+    "name": "Bombe Géniale 113/084 (UR)",
     "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Sinistrail 091/084 Nuit Noire carte française",
-    "vintedQuery": "Sinistrail 091/084 Nuit Noire"
-  },
-  {
-    "name": "Roublenard 092/084 (AR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Roublenard 092/084 Nuit Noire carte française",
-    "vintedQuery": "Roublenard 092/084 Nuit Noire"
-  },
-  {
-    "name": "Bastiodon 093/084 (AR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Bastiodon 093/084 Nuit Noire carte française",
-    "vintedQuery": "Bastiodon 093/084 Nuit Noire"
-  },
-  {
-    "name": "Bazoucan 094/084 (AR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Bazoucan 094/084 Nuit Noire carte française",
-    "vintedQuery": "Bazoucan 094/084 Nuit Noire"
-  },
-  {
-    "name": "Silvallié 095/084 (AR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Silvallie 095/084 Nuit Noire carte française",
-    "vintedQuery": "Silvallie 095/084 Nuit Noire"
-  },
-
-  {
-    "name": "Floramantis-ex 096/084 (UR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Floramantis ex 096/084 Nuit Noire carte française",
-    "vintedQuery": "Floramantis ex 096/084 Nuit Noire"
-  },
-  {
-    "name": "Wailord-ex 097/084 (UR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Wailord ex 097/084 Nuit Noire carte française",
-    "vintedQuery": "Wailord ex 097/084 Nuit Noire"
-  },
-  {
-    "name": "Méga-Zeraora-ex 098/084 (UR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Mega Zeraora ex 098/084 Nuit Noire carte française",
-    "vintedQuery": "Mega Zeraora ex 098/084 Nuit Noire"
-  },
-  {
-    "name": "Méga-Lugulabre-ex 099/084 (UR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Mega Lugulabre ex 099/084 Nuit Noire carte française",
-    "vintedQuery": "Mega Lugulabre ex 099/084 Nuit Noire"
-  },
-  {
-    "name": "Charkos-ex 100/084 (UR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Charkos ex 100/084 Nuit Noire carte française",
-    "vintedQuery": "Charkos ex 100/084 Nuit Noire"
-  },
-  {
-    "name": "Méga-Darkrai-ex 101/084 (UR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Mega Darkrai ex 101/084 Nuit Noire carte française",
-    "vintedQuery": "Mega Darkrai ex 101/084 Nuit Noire"
-  },
-  {
-    "name": "Morpeko-ex 102/084 (UR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Morpeko ex 102/084 Nuit Noire carte française",
-    "vintedQuery": "Morpeko ex 102/084 Nuit Noire"
-  },
-  {
-    "name": "Méga-Minotaupe-ex 103/084 (UR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Mega Minotaupe ex 103/084 Nuit Noire carte française",
-    "vintedQuery": "Mega Minotaupe ex 103/084 Nuit Noire"
-  },
-
-  {
-    "name": "Méga-Zeraora-ex 114/084 (SIR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Mega Zeraora ex 114/084 Nuit Noire carte française",
-    "vintedQuery": "Mega Zeraora ex 114/084 Nuit Noire"
+    "ebayQuery": "Bombe Geniale 113/084 Nuit Noire carte française",
+    "vintedQuery": "Bombe Geniale 113/084 Nuit Noire"
   },
   {
     "name": "Méga-Lugulabre-ex 115/084 (SIR)",
@@ -159,16 +73,22 @@
     "vintedQuery": "Mega Lugulabre ex 115/084 Nuit Noire"
   },
   {
-    "name": "Méga-Darkrai-ex 116/084 (SIR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Mega Darkrai ex 116/084 Nuit Noire carte française",
-    "vintedQuery": "Mega Darkrai ex 116/084 Nuit Noire"
-  },
-  {
     "name": "Morpeko-ex 117/084 (SIR)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Morpeko ex 117/084 Nuit Noire carte française",
     "vintedQuery": "Morpeko ex 117/084 Nuit Noire"
+  },
+  {
+    "name": "Combat Final de Gladio 118/084 (SIR)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Combat Final de Gladio 118/084 Nuit Noire carte française",
+    "vintedQuery": "Combat Final de Gladio 118/084 Nuit Noire"
+  },
+  {
+    "name": "Albia 119/084 (SIR)",
+    "set": "ME05 - Nuit Noire",
+    "ebayQuery": "Albia 119/084 Nuit Noire carte française",
+    "vintedQuery": "Albia 119/084 Nuit Noire"
   },
   {
     "name": "Méga-Darkrai-ex 120/084 (Gold)",

@@ -13,7 +13,12 @@ export interface WatchlistEntry {
   set: string;
   ebayQuery: string;
   // Requête Vinted dédiée ; si absente/null, retombe sur ebayQuery.
-  vintedQuery?: string | null;
+  // Peut être un tableau de variantes (ex: ["... ME05 ...", "... ME5 ..."]) : les vendeurs
+  // Vinted n'utilisent pas tous la même convention pour le numéro de set (zéro de tête ou
+  // non), et le search_text de Vinted ne fait pas ce rapprochement lui-même (voir
+  // isRelevantToQuery / fetchVintedItems) -> chaque variante est interrogée séparément puis
+  // les résultats sont fusionnés (dédupliqués par itemId).
+  vintedQuery?: string | string[] | null;
 }
 
 // Chaque cycle recalcule intégralement les TOP_N_PER_ENTRY annonces FR les moins chères
@@ -138,13 +143,46 @@ async function alertCheapestForSource(entry: WatchlistEntry, source: string, mat
   setLastAlertedTop3(entryKey, currentIds);
 }
 
+// Normalise vintedQuery (string | string[] | null) en tableau non vide, avec repli sur
+// ebayQuery si absente. Fonction pure, exportée pour être testable isolément.
+export function vintedQueries(entry: Pick<WatchlistEntry, "vintedQuery" | "ebayQuery">): string[] {
+  const query = entry.vintedQuery ?? entry.ebayQuery;
+  return Array.isArray(query) ? query : [query];
+}
+
+// Fusionne les résultats de plusieurs variantes de requête en dédupliquant par itemId (une
+// même annonce peut matcher plusieurs variantes). Fonction pure, exportée pour être testable
+// isolément (voir vintedQueries pour pourquoi plusieurs variantes existent).
+export function dedupeByItemId(itemLists: MarketplaceItem[][]): MarketplaceItem[] {
+  const seen = new Set<string>();
+  const merged: MarketplaceItem[] = [];
+
+  for (const items of itemLists) {
+    for (const item of items) {
+      if (seen.has(item.itemId)) continue;
+      seen.add(item.itemId);
+      merged.push(item);
+    }
+  }
+
+  return merged;
+}
+
+// Interroge chaque variante de requête séparément (voir WatchlistEntry.vintedQuery), chacune
+// isolée par fetchSourceItems : l'échec d'une seule n'empêche pas les autres de contribuer
+// leurs résultats.
+async function fetchVintedItems(entry: WatchlistEntry): Promise<MarketplaceItem[]> {
+  const itemLists = await Promise.all(
+    vintedQueries(entry).map((query) => fetchSourceItems("Vinted", entry.name, () => searchVinted(query)))
+  );
+  return dedupeByItemId(itemLists);
+}
+
 async function checkEntry(entry: WatchlistEntry): Promise<void> {
   const ebayItems = config.enabledSources.includes("ebay")
     ? await fetchSourceItems("eBay", entry.name, () => searchEbay(entry.ebayQuery))
     : [];
-  const vintedItems = config.enabledSources.includes("vinted")
-    ? await fetchSourceItems("Vinted", entry.name, () => searchVinted(entry.vintedQuery ?? entry.ebayQuery))
-    : [];
+  const vintedItems = config.enabledSources.includes("vinted") ? await fetchVintedItems(entry) : [];
 
   // eBay est un marché international : un vendeur y précise explicitement la langue,
   // donc l'absence d'indice reste suspecte (mode "strict"). Vinted est déjà 100%

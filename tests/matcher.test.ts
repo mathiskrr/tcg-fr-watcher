@@ -97,6 +97,14 @@ test("isSealed - rejette les produits reconditionnés ou d'occasion", () => {
   assert.equal(isSealed("Booster occasion nuit noire"), false);
 });
 
+test("isSealed - rejette les boîtes vides (contenu déjà sorti)", () => {
+  // Cas réel remonté : "ETB ME5 Nuit Noire vide" à 10€ -- sans ce filtre, une boîte vide
+  // s'invite dans le top 3 "moins cher" à la place d'un vrai ETB scellé.
+  assert.equal(isSealed("ETB ME5 Nuit Noire vide"), false, "cas réel remonté");
+  assert.equal(isSealed("2 ETB me5 nuit noire vides + accessoires"), false, "accord pluriel");
+  assert.equal(isSealed("Boîte etb pokémon nuit noire vide"), false);
+});
+
 test("isSealed - accepte les produits scellés (aucune mention d'ouverture)", () => {
   assert.equal(isSealed("ETB Nuit Noire ME05 scellé neuf"), true);
   assert.equal(isSealed("Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR"), true);

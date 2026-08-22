@@ -103,7 +103,11 @@ interface ProductTypeMarker {
 // dresseur elite" / etc.) sans avoir à énumérer toutes les combinaisons d'accents.
 const PRODUCT_TYPE_MARKERS: ProductTypeMarker[] = [
   { queryPattern: /\bdemi[\s-]?display\b/i, titlePattern: /\bdemi[\s-]?display\b/ },
-  { queryPattern: /\bdisplay\b/i, titlePattern: /\bdisplay\b/ },
+  // Lookbehind négatif : une requête "display" (36 boosters) simple ne doit pas matcher un
+  // titre "demi-display" (18 boosters) juste parce que "display" y est présent comme
+  // sous-chaîne -- sinon une recherche "display Nuit Noire" (sans le mot "demi") remonterait
+  // aussi les demi-displays, bien moins chers, et polluerait le classement "moins cher".
+  { queryPattern: /\bdisplay\b/i, titlePattern: /(?<!demi[\s-]?)\bdisplay\b/ },
   { queryPattern: /\betb\b/i, titlePattern: /\betb\b|\bcoffret\b[\s\S]*\bdresseur\b|\bdresseur\b[\s\S]*\bcoffret\b/ },
   { queryPattern: /\bbundle\b/i, titlePattern: /\bbundle\b/ },
   { queryPattern: /tri[\s-]?pack/i, titlePattern: /tri[\s-]?pack/ },

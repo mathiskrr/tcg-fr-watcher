@@ -206,6 +206,24 @@ test("isRelevantToQuery - le marqueur de type de produit ignore l'ordre demi-dis
   );
 });
 
+test("isRelevantToQuery - une requête 'display' simple (sans 'demi') rejette un titre 'demi-display'", () => {
+  // Bug réel diagnostiqué : "display Nuit Noire" (36 boosters) matchait aussi les titres
+  // "demi-display" (18 boosters, bien moins chers) car "display" y figure comme sous-chaîne
+  // -> ils polluaient le classement "moins cher" de l'entrée "Display" à la place des vraies
+  // annonces 36 boosters.
+  assert.equal(
+    isRelevantToQuery(
+      "Demi-display Pokémon Nuit Noire ME05 – 18 boosters FR",
+      "display Nuit Noire ME05 36 boosters"
+    ),
+    false
+  );
+  assert.equal(
+    isRelevantToQuery("Display Pokémon Nuit Noire ME05 – 36 boosters FR", "display Nuit Noire ME05 36 boosters"),
+    true
+  );
+});
+
 test("isRelevantToQuery - un numéro de carte différent rejette même avec un fort chevauchement de mots-clés", () => {
   // Même carte, même set, mais un numéro de variante différent (ex: base vs Alt Art) :
   // le chevauchement de mots-clés seul ("floramantis", "ex", "nuit", "noire") serait
