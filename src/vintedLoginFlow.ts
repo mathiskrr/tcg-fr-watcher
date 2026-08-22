@@ -1,3 +1,6 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 // Logique de connexion Vinted, séparée de vintedAuth.ts (qui pilote un vrai navigateur
 // Playwright) pour rester testable SANS jamais lancer de navigateur réel : LoginPage est un
 // sous-ensemble minimal de l'API Page de Playwright, qu'un vrai objet Page satisfait
@@ -19,6 +22,7 @@ export interface LoginPage {
   waitForSelector(selector: string, options?: { timeout?: number }): Promise<unknown>;
   content(): Promise<string>;
   context(): LoginPageContext;
+  screenshot(options: { path: string }): Promise<unknown>;
 }
 
 export type LoginOutcome =
@@ -47,6 +51,28 @@ const NAV_TIMEOUT_MS = 30_000;
 const FORM_TIMEOUT_MS = 30_000;
 const POST_SUBMIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 500;
+
+// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
+// Échec persistant sur "attente du champ email" même après correction de LOGIN_URL (plus de
+// 404) -- capture d'écran juste après le chargement de la page, AVANT la recherche du
+// sélecteur email, pour voir ce qui s'affiche réellement (bannière cookies ? structure de
+// page différente de EMAIL_SELECTOR ? autre chose ?). À RETIRER une fois la cause identifiée.
+const DEBUG_SCREENSHOT_ENABLED = true;
+
+async function debugScreenshot(page: LoginPage, step: string): Promise<void> {
+  if (!DEBUG_SCREENSHOT_ENABLED) return;
+
+  const filePath = join(tmpdir(), `vinted-debug-${step}-${Date.now()}.png`);
+  try {
+    await page.screenshot({ path: filePath });
+    console.log(`[vintedLoginFlow][debug] capture sauvegardée (étape "${step}"): ${filePath}`);
+  } catch (err) {
+    // Une capture qui échoue ne doit jamais faire échouer le login lui-même -- c'est un outil
+    // de diagnostic, pas une étape fonctionnelle.
+    console.error(`[vintedLoginFlow][debug] échec de la capture (étape "${step}"):`, err);
+  }
+}
+// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
@@ -140,6 +166,7 @@ export async function performVintedLogin(
   } catch (err) {
     return classifyStepError("navigation vers la page de login (page.goto)", err);
   }
+  await debugScreenshot(page, "01-apres-chargement-avant-selecteur-email");
 
   try {
     await page.waitForSelector(EMAIL_SELECTOR, { timeout: formTimeoutMs });

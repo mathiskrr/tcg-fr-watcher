@@ -14,13 +14,22 @@ interface MockPageOptions {
   html?: string;
   failGoto?: boolean;
   failWaitForSelector?: boolean;
+  screenshotCalls?: string[]; // rempli au fil des appels à screenshot(), si fourni
+  failScreenshot?: boolean;
 }
 
 // Implémente LoginPage à la main (aucune dépendance à playwright-chromium) : c'est tout
 // l'intérêt de la séparation avec vintedAuth.ts -- ces tests ne lancent jamais de vrai
 // navigateur.
 function makeMockPage(options: MockPageOptions = {}): LoginPage {
-  const { cookies = [], html = "<html></html>", failGoto = false, failWaitForSelector = false } = options;
+  const {
+    cookies = [],
+    html = "<html></html>",
+    failGoto = false,
+    failWaitForSelector = false,
+    screenshotCalls,
+    failScreenshot = false,
+  } = options;
 
   return {
     async goto(_url, _opts) {
@@ -40,6 +49,10 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
           return cookies;
         },
       };
+    },
+    async screenshot({ path }) {
+      if (failScreenshot) throw new Error("disque plein");
+      screenshotCalls?.push(path);
     },
   };
 }
@@ -224,5 +237,68 @@ test("performVintedLogin - logge précisément l'étape et le sélecteur qui ont
   assert.ok(
     errorSpy.mock.calls.some((c) => /attente du champ email.*input\[name="email"\]/.test(String(c.arguments[0]))),
     "doit nommer précisément l'étape et le sélecteur qui ont échoué"
+  );
+});
+
+test("performVintedLogin - [debug] prend une capture juste après le chargement, avant la recherche du sélecteur email", async () => {
+  const screenshotPaths: string[] = [];
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "eyJ.abc.def" }],
+    screenshotCalls: screenshotPaths,
+  });
+
+  await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.equal(screenshotPaths.length, 1);
+  assert.match(screenshotPaths[0], /vinted-debug-01-apres-chargement-avant-selecteur-email-\d+\.png$/);
+});
+
+test("performVintedLogin - [debug] la capture part MÊME quand le sélecteur email n'est jamais trouvé (cas réel diagnostiqué)", async () => {
+  const screenshotPaths: string[] = [];
+  const page = makeMockPage({ failWaitForSelector: true, screenshotCalls: screenshotPaths });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.equal(outcome.status, "timeout");
+  assert.equal(screenshotPaths.length, 1, "la capture doit partir avant l'échec du sélecteur, pas après");
+});
+
+test("performVintedLogin - [debug] une capture qui échoue n'empêche pas le login de continuer (best-effort)", async (t) => {
+  const errorSpy = t.mock.method(console, "error", () => {});
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "token-malgre-echec-capture" }],
+    failScreenshot: true,
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "token-malgre-echec-capture" });
+  assert.ok(
+    errorSpy.mock.calls.some((c) => /échec de la capture/.test(String(c.arguments[0]))),
+    "l'échec de la capture doit être loggé, sans jamais interrompre le login"
   );
 });
