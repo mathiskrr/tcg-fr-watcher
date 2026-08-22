@@ -37,19 +37,16 @@ interface MockPageOptions {
   html?: string;
   failGoto?: boolean;
   failWaitForSelector?: boolean; // ne s'applique qu'au sélecteur email (voir isEmailSelector)
-  screenshotCalls?: string[]; // rempli au fil des appels à screenshot(), si fourni
-  failScreenshot?: boolean;
   cookiePopupPresent?: boolean; // si true, le waitForSelector du consentement cookies "réussit" (sur la page principale)
   clickCalls?: string[]; // rempli au fil des appels à click() sur la page principale, si fourni
   frames?: LoginFrame[]; // iframes de la page, vide par défaut (voir makeMockFrame)
-  evaluateResult?: unknown; // valeur renvoyée par evaluate(), SANS jamais exécuter la fonction fournie (pas de vrai DOM en test)
 }
 
 // Le sélecteur email (EMAIL_SELECTOR) est le seul, dans le code de prod, à contenir ce
 // fragment -- permet au mock de distinguer "on attend le champ email" de "on attend le bouton
 // de consentement cookies" sans avoir à exporter les constantes internes de vintedLoginFlow.ts.
 function isEmailSelector(selector: string): boolean {
-  return selector.includes('input[name="email"]');
+  return selector.includes('input[name="username"]');
 }
 
 // Implémente LoginPage à la main (aucune dépendance à playwright-chromium) : c'est tout
@@ -61,12 +58,9 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     html = "<html></html>",
     failGoto = false,
     failWaitForSelector = false,
-    screenshotCalls,
-    failScreenshot = false,
     cookiePopupPresent = false,
     clickCalls,
     frames = [],
-    evaluateResult = [],
   } = options;
 
   return {
@@ -95,17 +89,8 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
         },
       };
     },
-    async screenshot({ path }) {
-      if (failScreenshot) throw new Error("disque plein");
-      screenshotCalls?.push(path);
-    },
     frames() {
       return frames;
-    },
-    // N'exécute JAMAIS `pageFunction` (elle référence `document`, inexistant en Node/test) --
-    // renvoie directement la valeur configurée par le test.
-    async evaluate<T>(_pageFunction: () => T): Promise<T> {
-      return evaluateResult as T;
     },
   };
 }
@@ -288,71 +273,8 @@ test("performVintedLogin - logge précisément l'étape et le sélecteur qui ont
   );
 
   assert.ok(
-    errorSpy.mock.calls.some((c) => /attente du champ email.*input\[name="email"\]/.test(String(c.arguments[0]))),
+    errorSpy.mock.calls.some((c) => /attente du champ email.*input\[name="username"\]/.test(String(c.arguments[0]))),
     "doit nommer précisément l'étape et le sélecteur qui ont échoué"
-  );
-});
-
-test("performVintedLogin - [debug] prend une capture juste après le chargement, avant la recherche du sélecteur email", async () => {
-  const screenshotPaths: string[] = [];
-  const page = makeMockPage({
-    cookies: [{ name: "access_token_web", value: "eyJ.abc.def" }],
-    screenshotCalls: screenshotPaths,
-  });
-
-  await performVintedLogin(
-    page,
-    "user@example.test",
-    "hunter2",
-    FAST_NAV_TIMEOUT_MS,
-    FAST_FORM_TIMEOUT_MS,
-    FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
-  );
-
-  assert.equal(screenshotPaths.length, 1);
-  assert.match(screenshotPaths[0], /vinted-debug-01-apres-chargement-avant-selecteur-email-\d+\.png$/);
-});
-
-test("performVintedLogin - [debug] la capture part MÊME quand le sélecteur email n'est jamais trouvé (cas réel diagnostiqué)", async () => {
-  const screenshotPaths: string[] = [];
-  const page = makeMockPage({ failWaitForSelector: true, screenshotCalls: screenshotPaths });
-
-  const outcome = await performVintedLogin(
-    page,
-    "user@example.test",
-    "hunter2",
-    FAST_NAV_TIMEOUT_MS,
-    FAST_FORM_TIMEOUT_MS,
-    FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
-  );
-
-  assert.equal(outcome.status, "timeout");
-  assert.equal(screenshotPaths.length, 1, "la capture doit partir avant l'échec du sélecteur, pas après");
-});
-
-test("performVintedLogin - [debug] une capture qui échoue n'empêche pas le login de continuer (best-effort)", async (t) => {
-  const errorSpy = t.mock.method(console, "error", () => {});
-  const page = makeMockPage({
-    cookies: [{ name: "access_token_web", value: "token-malgre-echec-capture" }],
-    failScreenshot: true,
-  });
-
-  const outcome = await performVintedLogin(
-    page,
-    "user@example.test",
-    "hunter2",
-    FAST_NAV_TIMEOUT_MS,
-    FAST_FORM_TIMEOUT_MS,
-    FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
-  );
-
-  assert.deepEqual(outcome, { status: "success", token: "token-malgre-echec-capture" });
-  assert.ok(
-    errorSpy.mock.calls.some((c) => /échec de la capture/.test(String(c.arguments[0]))),
-    "l'échec de la capture doit être loggé, sans jamais interrompre le login"
   );
 });
 
@@ -408,32 +330,6 @@ test("performVintedLogin - pas de popup de consentement cookies : aucune erreur,
     logSpy.mock.calls.some((c) => /aucune popup de consentement cookies détectée/.test(String(c.arguments[0]))),
     "doit logger l'absence de popup sans lever d'erreur"
   );
-});
-
-test("performVintedLogin - [debug] liste tous les iframes de la page (url + name)", async (t) => {
-  const logSpy = t.mock.method(console, "log", () => {});
-  const page = makeMockPage({
-    cookies: [{ name: "access_token_web", value: "token-ok" }],
-    frames: [
-      makeMockFrame({ url: "https://www.vinted.fr/", name: "" }),
-      makeMockFrame({ url: "https://consent.cookiebot.com/some-widget", name: "cookiebot-frame" }),
-    ],
-  });
-
-  await performVintedLogin(
-    page,
-    "user@example.test",
-    "hunter2",
-    FAST_NAV_TIMEOUT_MS,
-    FAST_FORM_TIMEOUT_MS,
-    FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
-  );
-
-  const messages = logSpy.mock.calls.map((c) => String(c.arguments[0]));
-  assert.ok(messages.some((m) => /2 frame\(s\) détectée\(s\)/.test(m)));
-  assert.ok(messages.some((m) => m.includes("https://www.vinted.fr/")));
-  assert.ok(messages.some((m) => m.includes("https://consent.cookiebot.com/some-widget") && m.includes("cookiebot-frame")));
 });
 
 test("performVintedLogin - popup de consentement dans un iframe CMP (cas réel diagnostiqué) : cherche et clique DANS l'iframe, pas sur la page principale", async (t) => {
@@ -501,58 +397,5 @@ test("performVintedLogin - un iframe présent mais qui ne correspond à aucun CM
   assert.ok(
     logSpy.mock.calls.some((c) => /consentement cookies détectée et acceptée/.test(String(c.arguments[0]))),
     "doit quand même trouver et cliquer le bouton, sur la page principale cette fois"
-  );
-});
-
-test("performVintedLogin - [debug] liste les attributs de chaque <input> quand le sélecteur email time out (cas réel diagnostiqué)", async (t) => {
-  const logSpy = t.mock.method(console, "log", () => {});
-  const page = makeMockPage({
-    failWaitForSelector: true,
-    evaluateResult: [
-      { name: null, id: "login-username", type: "text", placeholder: "Adresse e-mail", ariaLabel: null },
-      { name: null, id: "login-password", type: "password", placeholder: null, ariaLabel: "Mot de passe" },
-    ],
-  });
-
-  const outcome = await performVintedLogin(
-    page,
-    "user@example.test",
-    "hunter2",
-    FAST_NAV_TIMEOUT_MS,
-    FAST_FORM_TIMEOUT_MS,
-    FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
-  );
-
-  assert.equal(outcome.status, "timeout");
-  const messages = logSpy.mock.calls.map((c) => String(c.arguments[0]));
-  assert.ok(messages.some((m) => /2 <input> trouvé\(s\)/.test(m)));
-  assert.ok(messages.some((m) => m.includes("login-username") && m.includes("Adresse e-mail")));
-  assert.ok(messages.some((m) => m.includes("login-password") && m.includes("Mot de passe")));
-});
-
-test("performVintedLogin - [debug] une lecture des <input> qui échoue n'empêche pas la classification normale de l'erreur", async (t) => {
-  const errorSpy = t.mock.method(console, "error", () => {});
-  const page: LoginPage = {
-    ...makeMockPage({ failWaitForSelector: true }),
-    async evaluate() {
-      throw new Error("evaluate non disponible");
-    },
-  };
-
-  const outcome = await performVintedLogin(
-    page,
-    "user@example.test",
-    "hunter2",
-    FAST_NAV_TIMEOUT_MS,
-    FAST_FORM_TIMEOUT_MS,
-    FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
-  );
-
-  assert.equal(outcome.status, "timeout");
-  assert.ok(
-    errorSpy.mock.calls.some((c) => /échec de la lecture des <input>/.test(String(c.arguments[0]))),
-    "l'échec de la lecture doit être loggé, sans empêcher la classification normale de l'erreur"
   );
 });

@@ -1,6 +1,3 @@
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 // Logique de connexion Vinted, séparée de vintedAuth.ts (qui pilote un vrai navigateur
 // Playwright) pour rester testable SANS jamais lancer de navigateur réel : LoginPage est un
 // sous-ensemble minimal de l'API Page de Playwright, qu'un vrai objet Page satisfait
@@ -34,10 +31,7 @@ export interface LoginPage extends LoginClickTarget {
   fill(selector: string, value: string): Promise<void>;
   content(): Promise<string>;
   context(): LoginPageContext;
-  screenshot(options: { path: string }): Promise<unknown>;
   frames(): LoginFrame[];
-  // Exécuté dans le contexte du navigateur (pas Node) -- voir debugLogInputAttributes.
-  evaluate<T>(pageFunction: () => T): Promise<T>;
 }
 
 export type LoginOutcome =
@@ -56,7 +50,9 @@ const LOGIN_URL = "https://www.vinted.fr/member/login/email?ref_url=%2F";
 // DOM (pas d'API officielle, voir vinted.ts) et peut le changer sans préavis. S'ils cessent de
 // matcher, waitForSelector expire proprement en "timeout" (voir performVintedLogin) plutôt que
 // de rester bloqué indéfiniment : le fallback manuel (server.ts POST /token) prend le relais.
-const EMAIL_SELECTOR = 'input[name="email"], input[type="email"]';
+// Cas réel diagnostiqué : le champ d'identifiant Vinted est "username" (type="text"), pas
+// "email" -- confirmé par dump des attributs <input> de la page (voir historique des commits).
+const EMAIL_SELECTOR = 'input[name="username"]';
 const PASSWORD_SELECTOR = 'input[name="password"], input[type="password"]';
 const SUBMIT_SELECTOR = 'button[type="submit"]';
 
@@ -66,28 +62,6 @@ const NAV_TIMEOUT_MS = 30_000;
 const FORM_TIMEOUT_MS = 30_000;
 const POST_SUBMIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 500;
-
-// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
-// Échec persistant sur "attente du champ email" même après correction de LOGIN_URL (plus de
-// 404) -- capture d'écran juste après le chargement de la page, AVANT la recherche du
-// sélecteur email, pour voir ce qui s'affiche réellement (bannière cookies ? structure de
-// page différente de EMAIL_SELECTOR ? autre chose ?). À RETIRER une fois la cause identifiée.
-const DEBUG_SCREENSHOT_ENABLED = true;
-
-async function debugScreenshot(page: LoginPage, step: string): Promise<void> {
-  if (!DEBUG_SCREENSHOT_ENABLED) return;
-
-  const filePath = join(tmpdir(), `vinted-debug-${step}-${Date.now()}.png`);
-  try {
-    await page.screenshot({ path: filePath });
-    console.log(`[vintedLoginFlow][debug] capture sauvegardée (étape "${step}"): ${filePath}`);
-  } catch (err) {
-    // Une capture qui échoue ne doit jamais faire échouer le login lui-même -- c'est un outil
-    // de diagnostic, pas une étape fonctionnelle.
-    console.error(`[vintedLoginFlow][debug] échec de la capture (étape "${step}"):`, err);
-  }
-}
-// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 // Cas réel diagnostiqué : une popup de consentement cookies (RGPD, bandeau en bas avec
 // "Accepter tout" / "Cookies requis uniquement" / "Gérer les cookies") bloquait l'accès au
@@ -120,21 +94,6 @@ const COOKIE_CONSENT_SELECTOR = [
 // scénario qui ne se présente qu'une partie du temps.
 const COOKIE_CONSENT_TIMEOUT_MS = 5_000;
 
-// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
-// "aucune popup détectée" persistant malgré la confirmation visuelle du bandeau (capture
-// d'écran) -- piste probable : le bandeau est rendu dans un iframe (courant pour les CMP
-// comme OneTrust/Didomi), donc invisible aux sélecteurs cherchés sur page.waitForSelector
-// (qui ne regarde que le document principal, jamais l'intérieur des iframes). Liste tous les
-// iframes présents pour confirmer/infirmer cette piste. À RETIRER une fois la cause confirmée.
-async function debugLogFrames(page: LoginPage): Promise<void> {
-  const frames = page.frames();
-  console.log(`[vintedLoginFlow][debug] ${frames.length} frame(s) détectée(s) sur la page:`);
-  for (const frame of frames) {
-    console.log(`[vintedLoginFlow][debug]   - name="${frame.name()}" url="${frame.url()}"`);
-  }
-}
-// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
-
 // Motifs d'URL des CMP (Consent Management Platform) de cookies les plus courants -- best
 // effort, comme le reste des sélecteurs de ce fichier : cible l'iframe qui héberge RÉELLEMENT
 // le bandeau, plutôt que de chercher en vain sur le document principal.
@@ -150,8 +109,6 @@ function findCookieConsentFrame(page: LoginPage): LoginFrame | null {
 // findCookieConsentFrame), sinon sur la page principale (cas où le bandeau n'est pas dans un
 // iframe, ou CMP non reconnu par CMP_FRAME_URL_PATTERN).
 async function acceptCookieConsentIfPresent(page: LoginPage): Promise<void> {
-  await debugLogFrames(page); // DEBUG TEMPORAIRE -- voir commentaire plus haut
-
   const cmpFrame = findCookieConsentFrame(page);
   const searchTarget: LoginClickTarget = cmpFrame ?? page;
 
@@ -167,45 +124,6 @@ async function acceptCookieConsentIfPresent(page: LoginPage): Promise<void> {
     console.log("[vintedLoginFlow] aucune popup de consentement cookies détectée (ou déjà acceptée) -- on continue");
   }
 }
-
-// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
-// Le formulaire est bien visible sur la capture (email + mot de passe affichés) mais
-// EMAIL_SELECTOR (input[name="email"], input[type="email"]) time out quand même après 30s --
-// signe que ni l'attribut "name" ni "type" ne valent "email" sur le vrai champ. Liste TOUS les
-// attributs pertinents (name, id, type, placeholder, aria-label) de chaque <input> de la page
-// au moment de l'échec, pour identifier le vrai sélecteur à utiliser. À RETIRER une fois le
-// bon sélecteur trouvé.
-interface DebugInputSnapshot {
-  name: string | null;
-  id: string | null;
-  type: string | null;
-  placeholder: string | null;
-  ariaLabel: string | null;
-}
-
-async function debugLogInputAttributes(page: LoginPage): Promise<void> {
-  try {
-    const inputs = await page.evaluate<DebugInputSnapshot[]>(() =>
-      Array.from(document.querySelectorAll("input")).map((el) => ({
-        name: el.getAttribute("name"),
-        id: el.getAttribute("id"),
-        type: el.getAttribute("type"),
-        placeholder: el.getAttribute("placeholder"),
-        ariaLabel: el.getAttribute("aria-label"),
-      }))
-    );
-
-    console.log(`[vintedLoginFlow][debug] ${inputs.length} <input> trouvé(s) sur la page:`);
-    inputs.forEach((input, i) => {
-      console.log(
-        `[vintedLoginFlow][debug]   [${i}] name=${input.name} id=${input.id} type=${input.type} placeholder=${input.placeholder} aria-label=${input.ariaLabel}`
-      );
-    });
-  } catch (err) {
-    console.error("[vintedLoginFlow][debug] échec de la lecture des <input> de la page:", err);
-  }
-}
-// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
@@ -299,14 +217,12 @@ export async function performVintedLogin(
   } catch (err) {
     return classifyStepError("navigation vers la page de login (page.goto)", err);
   }
-  await debugScreenshot(page, "01-apres-chargement-avant-selecteur-email");
 
   await acceptCookieConsentIfPresent(page);
 
   try {
     await page.waitForSelector(EMAIL_SELECTOR, { timeout: formTimeoutMs });
   } catch (err) {
-    await debugLogInputAttributes(page); // DEBUG TEMPORAIRE -- voir commentaire plus haut
     return classifyStepError(`attente du champ email (sélecteur: ${EMAIL_SELECTOR})`, err);
   }
 
