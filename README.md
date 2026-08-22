@@ -96,10 +96,14 @@ continue de tourner mais les requêtes Vinted échoueront très probablement en 
 
 ```jsonc
 {
-  "name": "Dracaufeu ex",              // nom affiché dans les logs
-  "set": "Écarlate et Violet 151",     // informatif
-  "ebayQuery": "Dracaufeu ex 199 carte française",   // requête envoyée à eBay
-  "vintedQuery": "Dracaufeu ex 199 carte française"  // requête envoyée à Vinted (optionnel, retombe sur ebayQuery si absent/null)
+  "name": "Méga-Darkrai-ex 116/084 (SIR)", // affiché dans les logs/l'embed Discord ; pilote
+                                            // aussi le classement produit scellé (Display,
+                                            // ETB, Bundle, Tripack, Booster) et la couleur/
+                                            // emoji de rareté (Gold, SIR, AR/UR) — voir
+                                            // "Embed Discord" ci-dessous
+  "set": "ME05 - Nuit Noire",              // affiché dans le footer de l'embed Discord
+  "ebayQuery": "Mega Darkrai ex 116/084 Nuit Noire carte française", // requête envoyée à eBay
+  "vintedQuery": "Mega Darkrai ex 116/084 Nuit Noire" // requête envoyée à Vinted (optionnel, retombe sur ebayQuery si absent/null)
 }
 ```
 
@@ -137,18 +141,18 @@ src/
   ebay.ts       # client eBay Browse API (OAuth2 client credentials)
   vinted.ts     # client Vinted (endpoint interne catalog/items, retry sur 403/429)
   db.ts         # SQLite (node:sqlite) : last_alerted_top3 (dernier top 3 envoyé par entrée+source)
-  discord.ts    # envoi webhook (embed titre/prix/lien/image)
+  discord.ts    # envoi webhook (embed stylé : couleur/emoji par rareté, lien cliquable, footer)
   matcher.ts    # filtre langue FR (regex titre + exclusions), 2 modes selon la source
   http.ts       # fetch avec retry (backoff linéaire, prédicat de statut retryable configurable)
   scheduler.ts  # orchestration : cron + logique du cycle de vérification (multi-source)
   index.ts      # entrypoint
 tests/
   env.ts                  # variables d'env factices, importées en premier par les tests qui touchent config.ts
-  matcher.test.ts          # isFrenchTitle() (modes strict + assume-french) + isSealed(), fixtures/titles*.json
-  discord.test.ts          # sendNewListingAlert() avec fetch mocké, contre tests/fixtures/listing-items.json
+  matcher.test.ts          # isFrenchTitle() (strict + assume-french), isSealed(), isSealedProductEntry()
+  discord.test.ts          # sendNewListingAlert() avec fetch mocké : embed, rareté, retry 429, throttle
   ebay.test.ts              # OAuth + Browse API mockés, contre tests/fixtures/ebay-*.json
   vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
-  scheduler.test.ts          # selectCheapestN, hasTop3Changed, isSealedProductEntry (fonctions pures)
+  scheduler.test.ts          # selectCheapestN, hasTop3Changed (fonctions pures)
   fixtures/*.json            # jeux de données des tests
 ```
 
@@ -205,6 +209,29 @@ par leur `name` dans `watchlist.json`, voir `isSealedProductEntry`) filtrent en 
 annonces ouvertes/incomplètes/reconditionnées/d'occasion (`isSealed`) et exigent le bon type
 de produit dans le titre côté `vinted.ts` (`isRelevantToQuery`), pas juste un chevauchement
 de mots-clés.
+
+## Embed Discord (discord.ts)
+
+`sendNewListingAlert(item, entry)` construit un embed stylé à partir du `name` de l'entrée
+watchlist :
+
+- **Couleur** et **emoji** en préfixe du titre selon la rareté détectable dans `name`
+  (recherchée dans cet ordre) :
+  | Détecté dans `name`         | Couleur       | Emoji |
+  |------------------------------|---------------|-------|
+  | `Gold`                        | doré          | 🌟    |
+  | `SIR`                         | violet        | 🌟    |
+  | `AR` / `UR`                   | bleu          | ✨    |
+  | produit scellé (`isSealedProductEntry`) | gris | 📦    |
+  | rien de tout ça (carte standard) | gris       | (aucun) |
+- **Titre** : le titre de l'annonce, débarrassé d'un éventuel `(FR)` redondant en fin de
+  chaîne (toutes les annonces sont déjà filtrées FR en amont).
+- **Champ `💰 Prix`** : prix en gras.
+- **Champ `Annonce`** : lien Markdown cliquable `[🔗 Voir l'annonce](url)` — un footer
+  Discord ne peut afficher que du texte brut (jamais de lien cliquable), d'où ce champ dédié
+  plutôt qu'un footer du type `item {id}`.
+- **Footer** : nom du `set` de l'entrée, combiné au `timestamp` natif de l'embed (Discord
+  affiche l'heure d'envoi automatiquement, pas besoin de la formater à la main).
 
 ## Limitations connues (V2)
 
