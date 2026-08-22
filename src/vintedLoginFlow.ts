@@ -1,6 +1,3 @@
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 // Logique de connexion Vinted, séparée de vintedAuth.ts (qui pilote un vrai navigateur
 // Playwright) pour rester testable SANS jamais lancer de navigateur réel : LoginPage est un
 // sous-ensemble minimal de l'API Page de Playwright, qu'un vrai objet Page satisfait
@@ -15,27 +12,13 @@ export interface LoginPageContext {
   cookies(): Promise<LoginPageCookie[]>;
 }
 
-// request()/response() minimalistes : juste de quoi lire le statut HTTP et le User-Agent
-// réellement envoyé (voir debugLogArrival) -- pas une interface générale des requêtes réseau.
-export interface LoginPageRequest {
-  headers(): Record<string, string>;
-}
-
-export interface LoginPageResponse {
-  status(): number;
-  request(): LoginPageRequest;
-}
-
 export interface LoginPage {
-  // Playwright peut renvoyer `null` (ex: navigation vers une simple ancre) -- géré comme
-  // "aucune réponse capturée" plutôt qu'une erreur (voir debugLogArrival).
-  goto(url: string, options?: { timeout?: number }): Promise<LoginPageResponse | null>;
+  goto(url: string, options?: { timeout?: number }): Promise<unknown>;
   fill(selector: string, value: string): Promise<void>;
   click(selector: string): Promise<void>;
   waitForSelector(selector: string, options?: { timeout?: number }): Promise<unknown>;
   content(): Promise<string>;
   context(): LoginPageContext;
-  screenshot(options: { path: string }): Promise<unknown>;
 }
 
 export type LoginOutcome =
@@ -45,7 +28,10 @@ export type LoginOutcome =
   | { status: "timeout" }
   | { status: "unknown_error"; message: string };
 
-const LOGIN_URL = "https://www.vinted.fr/member/login";
+// Cas réel diagnostiqué : "https://www.vinted.fr/member/login" (sans le sous-chemin /email)
+// était la cause du "timeout" constaté en prod -- la page ne charge jamais le formulaire
+// email/mot de passe à cette URL.
+const LOGIN_URL = "https://www.vinted.fr/member/login/email?ref_url=%2F";
 
 // Sélecteurs du formulaire de connexion Vinted -- best-effort : Vinted ne documente pas son
 // DOM (pas d'API officielle, voir vinted.ts) et peut le changer sans préavis. S'ils cessent de
@@ -55,61 +41,12 @@ const EMAIL_SELECTOR = 'input[name="email"], input[type="email"]';
 const PASSWORD_SELECTOR = 'input[name="password"], input[type="password"]';
 const SUBMIT_SELECTOR = 'button[type="submit"]';
 
-// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
-// Timeouts relevés à 30s (au lieu de 20s/10s/15s) et captures d'écran à chaque étape clé,
-// le temps de diagnostiquer un échec "timeout" constaté en prod (page lente ? sélecteur
-// obsolète ? vrai blocage anti-bot ?). À RETIRER (ou au moins redescendre les timeouts et
-// désactiver les captures) une fois la cause identifiée -- voir README section
-// "Renouvellement automatique du token".
+// Relevés à 30s (contre 20s/10s/15s initialement) suite au diagnostic de l'échec "timeout" en
+// prod -- gardés à cette valeur plus généreuse par précaution (page Vinted parfois lente).
 const NAV_TIMEOUT_MS = 30_000;
 const FORM_TIMEOUT_MS = 30_000;
 const POST_SUBMIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 500;
-
-const DEBUG_LOGIN_ENABLED = true;
-
-const HTML_LOG_TRUNCATE_LENGTH = 2000;
-
-async function debugScreenshot(page: LoginPage, step: string): Promise<void> {
-  if (!DEBUG_LOGIN_ENABLED) return;
-
-  const filePath = join(tmpdir(), `vinted-debug-${step}-${Date.now()}.png`);
-  try {
-    await page.screenshot({ path: filePath });
-    console.log(`[vintedLoginFlow][debug] capture sauvegardée (étape "${step}"): ${filePath}`);
-  } catch (err) {
-    // Une capture qui échoue ne doit jamais faire échouer le login lui-même -- c'est un outil
-    // de diagnostic, pas une étape fonctionnelle.
-    console.error(`[vintedLoginFlow][debug] échec de la capture (étape "${step}"):`, err);
-  }
-}
-
-// Cas réel diagnostiqué : la 1ère capture (arrivée sur la page) était un écran blanc total --
-// ces logs permettent de distinguer une VRAIE réponse HTTP (bloquée ou non, avec un statut et
-// un HTML exploitables) d'un échec silencieux (page.goto qui n'a rien reçu, response === null).
-async function debugLogArrival(page: LoginPage, response: LoginPageResponse | null): Promise<void> {
-  if (!DEBUG_LOGIN_ENABLED) return;
-
-  if (response === null) {
-    console.log("[vintedLoginFlow][debug] page.goto() n'a renvoyé aucune réponse (response === null)");
-  } else {
-    const userAgent = response.request().headers()["user-agent"] ?? "(en-tête user-agent absent de la requête)";
-    console.log(`[vintedLoginFlow][debug] statut HTTP de navigation: ${response.status()}`);
-    console.log(`[vintedLoginFlow][debug] User-Agent envoyé: ${userAgent}`);
-  }
-
-  try {
-    const html = await page.content();
-    const truncated =
-      html.length > HTML_LOG_TRUNCATE_LENGTH
-        ? `${html.slice(0, HTML_LOG_TRUNCATE_LENGTH)}... (tronqué, ${html.length} caractères au total)`
-        : html;
-    console.log(`[vintedLoginFlow][debug] HTML à l'arrivée sur la page (${html.length} caractères):\n${truncated}`);
-  } catch (err) {
-    console.error("[vintedLoginFlow][debug] échec de la lecture du HTML à l'arrivée:", err);
-  }
-}
-// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
@@ -198,14 +135,11 @@ export async function performVintedLogin(
   postSubmitTimeoutMs = POST_SUBMIT_TIMEOUT_MS,
   pollIntervalMs = POLL_INTERVAL_MS
 ): Promise<LoginOutcome> {
-  let arrivalResponse: LoginPageResponse | null;
   try {
-    arrivalResponse = await page.goto(LOGIN_URL, { timeout: navTimeoutMs });
+    await page.goto(LOGIN_URL, { timeout: navTimeoutMs });
   } catch (err) {
     return classifyStepError("navigation vers la page de login (page.goto)", err);
   }
-  await debugLogArrival(page, arrivalResponse);
-  await debugScreenshot(page, "01-arrivee-sur-la-page");
 
   try {
     await page.waitForSelector(EMAIL_SELECTOR, { timeout: formTimeoutMs });
@@ -218,21 +152,18 @@ export async function performVintedLogin(
   } catch (err) {
     return classifyStepError(`remplissage du champ email (sélecteur: ${EMAIL_SELECTOR})`, err);
   }
-  await debugScreenshot(page, "02-apres-email-rempli");
 
   try {
     await page.fill(PASSWORD_SELECTOR, password);
   } catch (err) {
     return classifyStepError(`remplissage du champ mot de passe (sélecteur: ${PASSWORD_SELECTOR})`, err);
   }
-  await debugScreenshot(page, "03-apres-mot-de-passe-rempli");
 
   try {
     await page.click(SUBMIT_SELECTOR);
   } catch (err) {
     return classifyStepError(`clic sur le bouton de connexion (sélecteur: ${SUBMIT_SELECTOR})`, err);
   }
-  await debugScreenshot(page, "04-apres-clic-connexion");
 
   return await waitForOutcome(page, postSubmitTimeoutMs, pollIntervalMs);
 }

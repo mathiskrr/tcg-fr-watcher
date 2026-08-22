@@ -6,16 +6,12 @@ import { performVintedLogin, type LoginOutcome } from "./vintedLoginFlow.js";
 
 const BROWSER_LAUNCH_TIMEOUT_MS = 20_000;
 
-// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
-// Cas réel diagnostiqué : Chromium headless de Playwright s'identifie par défaut avec un
-// User-Agent contenant "HeadlessChrome", que Vinted (ou son WAF anti-bot) peut bloquer ou
-// traiter différemment d'un vrai navigateur desktop. Même User-Agent que celui déjà utilisé
-// pour les requêtes HTTP directes (voir BROWSER_HEADERS dans vinted.ts), pour rester cohérent.
-// À retirer avec le reste du debug temporaire une fois la cause du "timeout" confirmée -- si
-// ça s'avère être la cause, le conserver définitivement plutôt que le retirer.
+// Chromium headless de Playwright s'identifie par défaut avec un User-Agent contenant
+// "HeadlessChrome", que Vinted peut traiter différemment d'un vrai navigateur desktop --
+// même User-Agent que celui déjà utilisé pour les requêtes HTTP directes (voir
+// BROWSER_HEADERS dans vinted.ts), pour rester cohérent.
 const DESKTOP_CHROME_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
-// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 // Traduit l'issue de performVintedLogin en action concrète (mise à jour du tokenStore) et en
 // log clair. Séparée de renewVintedTokenViaLogin pour rester testable sans navigateur réel
