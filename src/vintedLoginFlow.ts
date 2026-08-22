@@ -26,12 +26,25 @@ export interface LoginFrame extends LoginClickTarget {
   name(): string;
 }
 
+// Sous-ensemble de l'API Locator de Playwright -- voir debugLogSubmitButtonState : count()
+// et :has-text() dans SUBMIT_SELECTOR sont des extensions Playwright, pas de la vraie syntaxe
+// CSS, donc pas interrogeables via un simple document.querySelectorAll() dans page.evaluate().
+export interface LoginLocator {
+  count(): Promise<number>;
+  isVisible(): Promise<boolean>;
+  isDisabled(): Promise<boolean>;
+  boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null>;
+  scrollIntoViewIfNeeded(options?: { timeout?: number }): Promise<void>;
+}
+
 export interface LoginPage extends LoginClickTarget {
   goto(url: string, options?: { timeout?: number }): Promise<unknown>;
   fill(selector: string, value: string): Promise<void>;
   content(): Promise<string>;
   context(): LoginPageContext;
   frames(): LoginFrame[];
+  locator(selector: string): LoginLocator;
+  viewportSize(): { width: number; height: number } | null;
 }
 
 export type LoginOutcome =
@@ -129,6 +142,35 @@ async function acceptCookieConsentIfPresent(page: LoginPage): Promise<void> {
   }
 }
 
+// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
+// Le clic sur SUBMIT_SELECTOR (button[type="submit"]:has-text("Continuer")) time out encore
+// malgré un sélecteur désormais précis -- le bouton existe (confirmé par un dump précédent)
+// mais n'est peut-être pas "actionnable" pour Playwright : désactivé tant que le JS de la page
+// ne juge pas les champs valides, hors zone visible (scroll nécessaire), ou recouvert par un
+// autre élément. Piste 1 : laisser un court délai au JS de validation avant de chercher le
+// bouton. Piste 2 : le faire défiler dans la zone visible avant de cliquer. Les deux restent
+// actives même en cas de succès (pas seulement au moment du diagnostic) -- si l'une d'elles
+// s'avère être LA solution, il faudra la garder définitivement plutôt que la retirer.
+const SUBMIT_BUTTON_READY_DELAY_MS = 500;
+
+async function debugLogSubmitButtonState(page: LoginPage): Promise<void> {
+  try {
+    const locator = page.locator(SUBMIT_SELECTOR);
+    const count = await locator.count();
+    const visible = count > 0 ? await locator.isVisible() : null;
+    const disabled = count > 0 ? await locator.isDisabled() : null;
+    const box = count > 0 ? await locator.boundingBox() : null;
+    const viewport = page.viewportSize();
+
+    console.log(
+      `[vintedLoginFlow][debug] SUBMIT_SELECTOR (${SUBMIT_SELECTOR}) -- count=${count} visible=${visible} disabled=${disabled} boundingBox=${JSON.stringify(box)} viewport=${JSON.stringify(viewport)}`
+    );
+  } catch (err) {
+    console.error("[vintedLoginFlow][debug] échec de la lecture de l'état du bouton de connexion:", err);
+  }
+}
+// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
+
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
 // Motifs observés empiriquement (aucune doc officielle Vinted sur son parcours anti-bot) --
@@ -201,10 +243,10 @@ async function waitForOutcome(page: LoginPage, deadlineMs: number, pollIntervalM
   return { status: "timeout" };
 }
 
-// navTimeoutMs/formTimeoutMs/postSubmitTimeoutMs/pollIntervalMs exposés (au lieu d'être en
-// dur) pour permettre des tests rapides et déterministes sans attendre les vrais délais de
-// production (voir tests/vintedLoginFlow.test.ts) -- même logique que retries/delayMsBase
-// dans searchVinted (vinted.ts).
+// navTimeoutMs/formTimeoutMs/postSubmitTimeoutMs/pollIntervalMs/submitButtonReadyDelayMs
+// exposés (au lieu d'être en dur) pour permettre des tests rapides et déterministes sans
+// attendre les vrais délais de production (voir tests/vintedLoginFlow.test.ts) -- même
+// logique que retries/delayMsBase dans searchVinted (vinted.ts).
 // Ne loggue et ne renvoie jamais `password` : seul le statut de l'issue sort de cette
 // fonction, jamais les identifiants fournis en entrée.
 export async function performVintedLogin(
@@ -214,7 +256,8 @@ export async function performVintedLogin(
   navTimeoutMs = NAV_TIMEOUT_MS,
   formTimeoutMs = FORM_TIMEOUT_MS,
   postSubmitTimeoutMs = POST_SUBMIT_TIMEOUT_MS,
-  pollIntervalMs = POLL_INTERVAL_MS
+  pollIntervalMs = POLL_INTERVAL_MS,
+  submitButtonReadyDelayMs = SUBMIT_BUTTON_READY_DELAY_MS
 ): Promise<LoginOutcome> {
   try {
     await page.goto(LOGIN_URL, { timeout: navTimeoutMs });
@@ -242,9 +285,16 @@ export async function performVintedLogin(
     return classifyStepError(`remplissage du champ mot de passe (sélecteur: ${PASSWORD_SELECTOR})`, err);
   }
 
+  // DEBUG TEMPORAIRE -- voir commentaire sur SUBMIT_BUTTON_READY_DELAY_MS plus haut.
+  await sleep(submitButtonReadyDelayMs);
+
   try {
+    // DEBUG TEMPORAIRE -- scrollIntoViewIfNeeded avant le clic, au cas où le bouton soit hors
+    // de la zone visible (voir commentaire plus haut).
+    await page.locator(SUBMIT_SELECTOR).scrollIntoViewIfNeeded({ timeout: formTimeoutMs });
     await page.click(SUBMIT_SELECTOR);
   } catch (err) {
+    await debugLogSubmitButtonState(page); // DEBUG TEMPORAIRE -- voir commentaire plus haut
     return classifyStepError(`clic sur le bouton de connexion (sélecteur: ${SUBMIT_SELECTOR})`, err);
   }
 

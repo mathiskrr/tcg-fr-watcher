@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { performVintedLogin, type LoginPage, type LoginPageCookie, type LoginFrame } from "../src/vintedLoginFlow.js";
+import {
+  performVintedLogin,
+  type LoginPage,
+  type LoginPageCookie,
+  type LoginFrame,
+  type LoginLocator,
+} from "../src/vintedLoginFlow.js";
 
 // Timeouts réduits pour que les scénarios "timeout"/sondage restent rapides en test (voir
 // commentaire dans vintedLoginFlow.ts sur pourquoi ces valeurs sont exposées en paramètres).
@@ -8,6 +14,7 @@ const FAST_NAV_TIMEOUT_MS = 50;
 const FAST_FORM_TIMEOUT_MS = 50;
 const FAST_POST_SUBMIT_TIMEOUT_MS = 50;
 const FAST_POLL_INTERVAL_MS = 10;
+const FAST_SUBMIT_READY_DELAY_MS = 0;
 
 interface MockFrameOptions {
   url: string;
@@ -32,6 +39,44 @@ function makeMockFrame(options: MockFrameOptions): LoginFrame {
   };
 }
 
+interface MockLocatorOptions {
+  count?: number;
+  visible?: boolean;
+  disabled?: boolean;
+  boundingBox?: { x: number; y: number; width: number; height: number } | null;
+  failScrollIntoView?: boolean;
+}
+
+// Implémente LoginLocator à la main -- même principe que makeMockPage : aucun vrai navigateur.
+// Par défaut, un bouton bien présent/visible/actionnable (le cas "tout va bien").
+function makeMockLocator(options: MockLocatorOptions = {}): LoginLocator {
+  const {
+    count = 1,
+    visible = true,
+    disabled = false,
+    boundingBox = { x: 0, y: 0, width: 100, height: 40 },
+    failScrollIntoView = false,
+  } = options;
+
+  return {
+    async count() {
+      return count;
+    },
+    async isVisible() {
+      return visible;
+    },
+    async isDisabled() {
+      return disabled;
+    },
+    async boundingBox() {
+      return boundingBox;
+    },
+    async scrollIntoViewIfNeeded(_opts) {
+      if (failScrollIntoView) throw new Error("locator.scrollIntoViewIfNeeded: Timeout 30000ms exceeded");
+    },
+  };
+}
+
 interface MockPageOptions {
   cookies?: LoginPageCookie[];
   html?: string;
@@ -40,6 +85,9 @@ interface MockPageOptions {
   cookiePopupPresent?: boolean; // si true, le waitForSelector du consentement cookies "réussit" (sur la page principale)
   clickCalls?: string[]; // rempli au fil des appels à click() sur la page principale, si fourni
   frames?: LoginFrame[]; // iframes de la page, vide par défaut (voir makeMockFrame)
+  failSubmitClick?: boolean; // ne s'applique qu'au clic sur le bouton de connexion (voir isSubmitSelector)
+  submitLocator?: MockLocatorOptions; // état du Locator renvoyé pour SUBMIT_SELECTOR (voir isSubmitSelector)
+  viewportSize?: { width: number; height: number } | null;
 }
 
 // Le sélecteur email (EMAIL_SELECTOR) est le seul, dans le code de prod, à contenir ce
@@ -47,6 +95,10 @@ interface MockPageOptions {
 // de consentement cookies" sans avoir à exporter les constantes internes de vintedLoginFlow.ts.
 function isEmailSelector(selector: string): boolean {
   return selector.includes('input[name="username"]');
+}
+
+function isSubmitSelector(selector: string): boolean {
+  return selector.includes('button[type="submit"]');
 }
 
 // Implémente LoginPage à la main (aucune dépendance à playwright-chromium) : c'est tout
@@ -61,6 +113,9 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     cookiePopupPresent = false,
     clickCalls,
     frames = [],
+    failSubmitClick = false,
+    submitLocator = {},
+    viewportSize = { width: 1280, height: 720 },
   } = options;
 
   return {
@@ -69,6 +124,9 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     },
     async fill(_selector, _value) {},
     async click(selector) {
+      if (isSubmitSelector(selector) && failSubmitClick) {
+        throw new Error("locator.click: Timeout 30000ms exceeded");
+      }
       clickCalls?.push(selector);
     },
     async waitForSelector(selector, _opts) {
@@ -92,6 +150,12 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     frames() {
       return frames;
     },
+    locator(selector) {
+      return isSubmitSelector(selector) ? makeMockLocator(submitLocator) : makeMockLocator();
+    },
+    viewportSize() {
+      return viewportSize;
+    },
   };
 }
 
@@ -105,7 +169,8 @@ test("performVintedLogin - succès : renvoie le token du cookie access_token_web
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "eyJ.abc.def" });
@@ -126,7 +191,8 @@ test("performVintedLogin - ignore un cookie sans rapport et prend le bon par son
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "le-bon-token" });
@@ -142,7 +208,8 @@ test("performVintedLogin - détecte un captcha/2FA dans le HTML de la page", asy
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "captcha_or_2fa" });
@@ -158,7 +225,8 @@ test("performVintedLogin - détecte des identifiants refusés dans le HTML de la
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "invalid_credentials" });
@@ -174,7 +242,8 @@ test("performVintedLogin - ni cookie ni motif d'erreur avant le délai -> timeou
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "timeout" });
@@ -190,7 +259,8 @@ test("performVintedLogin - un timeout Playwright sur goto() est classé 'timeout
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "timeout" });
@@ -206,7 +276,8 @@ test("performVintedLogin - un timeout Playwright sur waitForSelector() est class
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "timeout" });
@@ -227,7 +298,8 @@ test("performVintedLogin - une erreur Playwright non liée à un timeout est cla
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, {
@@ -251,7 +323,8 @@ test("performVintedLogin - ne fait jamais fuiter le mot de passe dans une erreur
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.equal(outcome.status, "unknown_error");
@@ -269,7 +342,8 @@ test("performVintedLogin - logge précisément l'étape et le sélecteur qui ont
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.ok(
@@ -294,7 +368,8 @@ test("performVintedLogin - popup de consentement cookies présente : cliquée, p
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-apres-popup-cookies" });
@@ -322,7 +397,8 @@ test("performVintedLogin - pas de popup de consentement cookies : aucune erreur,
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-sans-popup" });
@@ -359,7 +435,8 @@ test("performVintedLogin - popup de consentement dans un iframe CMP (cas réel d
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-via-iframe" });
@@ -394,7 +471,8 @@ test("performVintedLogin - un iframe présent mais qui ne correspond à aucun CM
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-fallback-page" });
@@ -418,9 +496,132 @@ test("performVintedLogin - clique bien le bouton 'Continuer' précis (pas un des
     FAST_NAV_TIMEOUT_MS,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-bouton-continuer" });
   assert.deepEqual(clickCalls, ['button[type="submit"]:has-text("Continuer")']);
+});
+
+test("performVintedLogin - fait défiler le bouton dans la zone visible avant de cliquer", async () => {
+  let scrollCalled = false;
+  const page: LoginPage = {
+    ...makeMockPage({ cookies: [{ name: "access_token_web", value: "token-scroll-ok" }] }),
+    locator(selector) {
+      return {
+        ...makeMockLocator(),
+        async scrollIntoViewIfNeeded(_opts) {
+          scrollCalled = true;
+        },
+      };
+    },
+  };
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "token-scroll-ok" });
+  assert.equal(scrollCalled, true, "scrollIntoViewIfNeeded doit être appelé avant le clic sur le bouton de connexion");
+});
+
+test("performVintedLogin - [debug] un clic qui échoue logge l'état du bouton (count/visible/disabled/boundingBox/viewport)", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const page = makeMockPage({
+    failSubmitClick: true,
+    submitLocator: { count: 1, visible: true, disabled: true, boundingBox: { x: 10, y: 20, width: 120, height: 44 } },
+    viewportSize: { width: 1280, height: 720 },
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
+  );
+
+  assert.equal(outcome.status, "timeout");
+  const messages = logSpy.mock.calls.map((c) => String(c.arguments[0]));
+  assert.ok(
+    messages.some(
+      (m) => m.includes("count=1") && m.includes("visible=true") && m.includes("disabled=true") && m.includes('"width":120')
+    ),
+    "doit logger l'état complet du bouton (count/visible/disabled/boundingBox)"
+  );
+  assert.ok(messages.some((m) => m.includes('"width":1280')), "doit logger la taille du viewport");
+});
+
+test("performVintedLogin - [debug] count=0 (bouton absent) est loggé sans planter", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const page = makeMockPage({
+    failSubmitClick: true,
+    submitLocator: { count: 0 },
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
+  );
+
+  assert.equal(outcome.status, "timeout");
+  assert.ok(logSpy.mock.calls.some((c) => String(c.arguments[0]).includes("count=0")));
+});
+
+test("performVintedLogin - [debug] un échec de lecture de l'état du bouton n'empêche pas la classification normale de l'erreur", async (t) => {
+  const errorSpy = t.mock.method(console, "error", () => {});
+  const page: LoginPage = {
+    ...makeMockPage({ failSubmitClick: true }),
+    locator(_selector) {
+      return {
+        async count() {
+          throw new Error("locator introuvable");
+        },
+        async isVisible() {
+          return false;
+        },
+        async isDisabled() {
+          return false;
+        },
+        async boundingBox() {
+          return null;
+        },
+        async scrollIntoViewIfNeeded() {},
+      };
+    },
+  };
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS
+  );
+
+  assert.equal(outcome.status, "timeout");
+  assert.ok(
+    errorSpy.mock.calls.some((c) => /échec de la lecture de l'état du bouton/.test(String(c.arguments[0]))),
+    "l'échec de la lecture doit être loggé, sans empêcher la classification normale de l'erreur"
+  );
 });
