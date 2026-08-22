@@ -131,6 +131,8 @@ relais selon `CRON_SCHEDULE` (par défaut `*/10 * * * *`, toutes les 10 minutes)
 | `WATCHLIST_PATH`        | non         | `./watchlist.json`          | Chemin du fichier watchlist                      |
 | `ENABLED_SOURCES`       | non         | `ebay,vinted`               | Sources actives, séparées par des virgules (`ebay`, `vinted`) |
 | `VINTED_ACCESS_TOKEN_WEB` | non       | —                           | Cookie de session Vinted (JWT), voir section "Vinted" |
+| `ADMIN_PORT`            | non         | `3939`                      | Port du serveur d'admin (renouvellement à distance du token), voir section dédiée |
+| `ADMIN_SECRET`          | non         | —                           | Secret partagé du serveur d'admin ; **serveur désactivé si absent** |
 
 ## Architecture
 
@@ -144,6 +146,8 @@ src/
   discord.ts    # envoi/suppression webhook (embed stylé : couleur/emoji par rareté, lien cliquable, footer)
   matcher.ts    # filtre langue FR (regex titre + exclusions), 2 modes selon la source
   http.ts       # fetch avec retry (backoff linéaire, prédicat de statut retryable configurable)
+  tokenStore.ts # token Vinted en mémoire, modifiable à chaud (voir server.ts) sans redémarrage
+  server.ts     # serveur HTTP admin (POST /token, GET /status) pour renouveler le token à distance
   scheduler.ts  # orchestration : cron + logique du cycle de vérification (multi-source)
   index.ts      # entrypoint
 tests/
@@ -153,6 +157,7 @@ tests/
   ebay.test.ts              # OAuth + Browse API mockés, contre tests/fixtures/ebay-*.json
   vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
   scheduler.test.ts          # selectCheapestN, diffAlertedItems, vintedQueries, dedupeByItemId (fonctions pures)
+  server.test.ts             # POST /token, GET /status : auth (accepté/refusé), jamais le secret/token dans les logs
   fixtures/*.json            # jeux de données des tests
 ```
 
@@ -241,13 +246,113 @@ plus bas) :
 - **Footer** : nom du `set` de l'entrée, combiné au `timestamp` natif de l'embed (Discord
   affiche l'heure d'envoi automatiquement, pas besoin de la formater à la main).
 
+## Serveur d'admin (renouvellement du token à distance)
+
+Le cookie Vinted (`VINTED_ACCESS_TOKEN_WEB`) expire toutes les ~2h (voir section "Vinted").
+Sur un serveur tournant 24/7 (VPS, Oracle Cloud...), y retourner en SSH à chaque expiration
+est vite pénible. Le serveur d'admin (`server.ts`) expose deux routes HTTP minimalistes
+(`node:http`, aucune dépendance) pour le faire depuis un téléphone ou un PC, n'importe où.
+
+**Désactivé par défaut** : il ne démarre que si `ADMIN_SECRET` est défini dans `.env` (sinon
+`index.ts` logge `serveur admin désactivé` et n'ouvre aucun port). Génère un secret fort et
+unique, jamais un mot de passe existant :
+
+```bash
+openssl rand -hex 32
+```
+
+### Routes
+
+Toutes les routes exigent `Authorization: Bearer <ADMIN_SECRET>` (comparaison en temps
+constant via `crypto.timingSafeEqual` — voir "Sécurité" plus bas), sinon `401`.
+
+- **`POST /token`** — met à jour le token Vinted **en mémoire** (pas besoin de réécrire `.env`
+  ni de redémarrer le bot) :
+  ```bash
+  curl -X POST http://TON_SERVEUR:3939/token \
+    -H "Authorization: Bearer $ADMIN_SECRET" \
+    -H "Content-Type: application/json" \
+    -d '{"token": "eyJhbGciOi..."}'
+  ```
+  Réponse `200` : `{"ok": true, "tokenExpiresAt": "2026-08-22T18:49:55.000Z"}` (date décodée
+  du JWT). `400` si `token` est absent/vide ou si le corps n'est pas du JSON valide.
+
+- **`GET /status`** — vérifie à distance que le bot tourne toujours, sans lire les logs/SSH :
+  ```bash
+  curl http://TON_SERVEUR:3939/status -H "Authorization: Bearer $ADMIN_SECRET"
+  ```
+  Réponse `200` :
+  ```json
+  {
+    "tokenPresent": true,
+    "tokenExpiresAt": "2026-08-22T18:49:55.000Z",
+    "lastCycleCompletedAt": "2026-08-22T18:10:03.696Z",
+    "watchlistEntryCount": 15
+  }
+  ```
+
+### Depuis un téléphone (sans terminal)
+
+- **Android** : app [HTTP Shortcuts](https://play.google.com/store/apps/details?id=ch.rmy.android.http_shortcuts)
+  — crée un raccourci `POST` vers `http://TON_SERVEUR:3939/token`, ajoute l'en-tête
+  `Authorization: Bearer <ADMIN_SECRET>`, et un corps JSON avec une variable `{{token}}` que
+  l'app te demande de saisir/coller à chaque exécution (`{"token": "{{token}}"}`). Une fois
+  configuré, renouveler le token = ouvrir le raccourci, coller le cookie copié sur vinted.fr,
+  valider.
+- **iOS** : app **Raccourcis** (Shortcuts) — action "Obtenir le contenu d'une URL", méthode
+  `POST`, en-têtes `Authorization` / `Content-Type`, corps JSON avec une demande de saisie de
+  texte pour le token. Peut aussi s'ajouter à l'écran d'accueil comme icône dédiée.
+
+### Sécurité
+
+- Le secret est comparé en **temps constant** (`timingSafeEqual`), jamais avec `===` : une
+  comparaison naïve s'arrête au premier caractère différent, ce qui permet en théorie de
+  retrouver le secret par mesure du temps de réponse (timing attack).
+- Le secret fourni (valide ou non) et le token Vinted ne sont **jamais loggés** : seule une
+  tentative refusée est loggée (route + IP), et un token mis à jour n'apparaît dans les logs
+  que via sa date d'expiration décodée (pas la valeur du token lui-même).
+- Le port n'est PAS protégé par un rate-limit ni un fail2ban : voir "Firewall & HTTPS"
+  ci-dessous pour restreindre l'exposition réseau.
+
+### Firewall & HTTPS (Oracle Cloud)
+
+Le serveur écoute en HTTP nu (pas de TLS) sur `ADMIN_PORT` (3939 par défaut) — à ne JAMAIS
+exposer tel quel sur Internet sans réflexion :
+
+1. **Ouvrir uniquement ce port, pas plus** : dans la Security List (VCN classique) ou le
+   Network Security Group (NSG, recommandé par Oracle) de l'instance, ajoute une règle Ingress
+   `TCP` sur le port `3939` (ou ta valeur d'`ADMIN_PORT`) — jamais une plage large, jamais
+   `0.0.0.0/0` sur d'autres ports que ceux réellement utilisés (SSH 22, ce port). Un NSG
+   attaché directement à la VNIC de l'instance est plus simple à auditer qu'une Security List
+   partagée par tout le VCN.
+2. Le firewall interne de l'OS (`firewalld` sur Rocky Linux) doit **aussi** autoriser le port
+   — la règle cloud seule ne suffit pas :
+   ```bash
+   sudo firewall-cmd --permanent --add-port=3939/tcp
+   sudo firewall-cmd --reload
+   ```
+3. **HTTPS recommandé** : en HTTP nu, le secret transite en clair sur le réseau (visible par
+   n'importe quel intermédiaire — Wi-Fi public, FAI...). Un reverse proxy **nginx + certbot**
+   devant le port admin est la solution la plus simple :
+   - nginx écoute en `443` (TLS via Let's Encrypt/certbot) sur un sous-domaine dédié et
+     proxy-passe vers `127.0.0.1:3939` (le port admin n'écoute alors QUE sur `localhost`, plus
+     besoin de l'ouvrir du tout dans le firewall/NSG — seul `443` l'est).
+   - Alternative plus légère si un nom de domaine n'est pas souhaité : un tunnel
+     [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/)
+     ou [Tailscale](https://tailscale.com/) expose le port sans ouvrir quoi que ce soit
+     publiquement (accès restreint à ton compte/réseau privé) — pertinent si l'usage reste
+     strictement personnel (toi seul, depuis ton téléphone).
+   - Sans l'un ou l'autre, le secret circule en clair : acceptable pour un test rapide, pas
+     pour un usage durable exposé sur Internet.
+
 ## Limitations connues (V2)
 
 - Le cookie `access_token_web` de Vinted est configuré manuellement et expire au bout de
   quelques heures : sans renouvellement régulier, les requêtes Vinted finissent par échouer
-  en 401 (détecté et loggé clairement, voir section "Vinted" ci-dessus, mais pas de renouvellement
-  automatique — cela nécessiterait de gérer un `refresh_token_web` et un flux de refresh, hors
-  scope volontairement pour rester simple).
+  en 401 (détecté et loggé clairement, voir section "Vinted" ci-dessus). Le serveur d'admin
+  (voir section dédiée) permet de le renouveler à distance sans SSH, mais reste manuel — pas
+  de renouvellement automatique (cela nécessiterait de gérer un `refresh_token_web` et un flux
+  de refresh, hors scope volontairement pour rester simple).
 - Les `itemId` sont propres à chaque marketplace et ne sont donc pas garantis uniques entre eBay
   et Vinted : `scheduler.ts` préfixe la clé (`ebay:...` / `vinted:...`) pour éviter toute collision
   dans le top 3 stocké.

@@ -1,5 +1,5 @@
-import { config } from "./config.js";
 import { fetchWithRetry } from "./http.js";
+import { getVintedAccessToken } from "./tokenStore.js";
 import type { MarketplaceItem } from "./types.js";
 
 export type VintedItem = MarketplaceItem;
@@ -220,13 +220,16 @@ interface VintedApiResponse {
 }
 
 // retries/delayMsBase/accessTokenWeb exposés (au lieu d'être en dur) pour permettre des
-// tests rapides et déterministes sans dépendre de config.ts ni du vrai backoff.
+// tests rapides et déterministes sans dépendre de tokenStore.ts ni du vrai backoff.
+// accessTokenWeb retombe sur tokenStore.ts (pas directement config.ts) : le token peut être
+// renouvelé à chaud via POST /token (voir server.ts) sans redémarrer le process, alors que
+// config.vintedAccessTokenWeb ne reflète que la valeur lue dans .env au démarrage.
 export async function searchVinted(
   query: string,
   limit = 50,
   retries = 3,
   delayMsBase = 1500,
-  accessTokenWeb: string | null = config.vintedAccessTokenWeb
+  accessTokenWeb: string | null = getVintedAccessToken()
 ): Promise<VintedItem[]> {
   const headers: Record<string, string> = { ...BROWSER_HEADERS };
 

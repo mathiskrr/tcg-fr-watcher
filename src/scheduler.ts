@@ -226,6 +226,21 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
   await alertCheapestForSource(entry, "vinted", vintedMatches);
 }
 
+// Horodatage du dernier cycle complet, en mémoire (voir GET /status dans server.ts) : permet
+// de vérifier à distance que le bot tourne toujours sans avoir à lire les logs/SSH.
+let lastCycleCompletedAt: number | null = null;
+
+export function getLastCycleCompletedAt(): number | null {
+  return lastCycleCompletedAt;
+}
+
+// Nombre d'entrées actives de la watchlist (voir GET /status dans server.ts). Relit le
+// fichier à chaque appel (comme loadWatchlist) : appelé rarement (une requête HTTP manuelle),
+// pas besoin de mise en cache.
+export function getActiveWatchlistCount(): number {
+  return loadWatchlist().length;
+}
+
 export async function runCheck(): Promise<void> {
   const watchlist = loadWatchlist();
   console.log(
@@ -240,6 +255,7 @@ export async function runCheck(): Promise<void> {
     }
   }
 
+  lastCycleCompletedAt = Date.now();
   console.log("[scheduler] cycle de vérification terminé");
 }
 

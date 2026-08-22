@@ -51,8 +51,16 @@ export const config = {
   // Cookie de session Vinted (JWT), à récupérer manuellement (pas d'API officielle) :
   // connecté sur vinted.fr, DevTools > Application/Storage > Cookies > "access_token_web".
   // Optionnel : sans lui, les requêtes Vinted échouent généralement en 401 (voir vinted.ts).
+  // Valeur de démarrage seulement : la valeur réellement utilisée par vinted.ts vit ensuite
+  // dans tokenStore.ts (modifiable à chaud via POST /token, voir server.ts), pas ici.
   vintedAccessTokenWeb: process.env.VINTED_ACCESS_TOKEN_WEB || null,
   enabledSources,
+  // Port HTTP du serveur d'admin (mise à jour à distance du token Vinted, voir server.ts).
+  adminPort: Number(process.env.ADMIN_PORT ?? 3939),
+  // Secret partagé requis pour authentifier les requêtes du serveur d'admin. Optionnel :
+  // le serveur ne démarre pas du tout si absent, pour ne jamais exposer un endpoint ouvert
+  // par accident (voir server.ts / index.ts).
+  adminSecret: process.env.ADMIN_SECRET || null,
 };
 
 export type Config = typeof config;
