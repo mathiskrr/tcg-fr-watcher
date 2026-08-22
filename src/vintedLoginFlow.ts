@@ -30,24 +30,12 @@ export interface LoginFrame extends LoginClickTarget {
   name(): string;
 }
 
-// Sous-ensemble de l'API Locator de Playwright -- voir debugLogSubmitButtonState : count()
-// et :has-text() dans SUBMIT_SELECTOR sont des extensions Playwright, pas de la vraie syntaxe
-// CSS, donc pas interrogeables via un simple document.querySelectorAll() dans page.evaluate().
-export interface LoginLocator {
-  count(): Promise<number>;
-  isVisible(): Promise<boolean>;
-  isDisabled(): Promise<boolean>;
-  boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null>;
-}
-
 export interface LoginPage extends LoginClickTarget {
   goto(url: string, options?: { timeout?: number }): Promise<unknown>;
   fill(selector: string, value: string): Promise<void>;
   content(): Promise<string>;
   context(): LoginPageContext;
   frames(): LoginFrame[];
-  locator(selector: string): LoginLocator;
-  viewportSize(): { width: number; height: number } | null;
 }
 
 export type LoginOutcome =
@@ -145,35 +133,16 @@ async function acceptCookieConsentIfPresent(page: LoginPage): Promise<void> {
   }
 }
 
-// Cas réel diagnostiqué : count=1, visible=true, disabled=false, boundingBox dans le viewport
-// -- tout semble normal côté Locator, mais scrollIntoViewIfNeeded() lui-même timeout (essayé
-// puis retiré, voir historique des commits) : signe qu'un élément invisible/transparent est
-// positionné par-dessus le bouton et bloque les interactions (résidu d'overlay de la popup
-// cookies, même après clic sur "Accepter tout"). D'où le clic en `force: true` ci-dessous, qui
-// ignore les vérifications d'actionabilité de Playwright -- gardé même en cas de succès (pas
-// seulement pour le diagnostic) : le contournement EST potentiellement la solution définitive.
+// Cas réel diagnostiqué (confirmé résolu en prod) : un élément invisible/transparent restait
+// positionné par-dessus le bouton de connexion (résidu d'overlay de la popup cookies, même
+// après clic sur "Accepter tout"), faisant échouer aussi bien click() que
+// scrollIntoViewIfNeeded() malgré un bouton par ailleurs visible/actionnable. Le clic en
+// `force: true` (voir plus bas) ignore les vérifications d'actionabilité de Playwright et
+// contourne ce résidu.
 //
-// Ce délai reste actif en complément : laisse le JS de validation du formulaire un instant
-// pour activer le bouton avant de chercher/cliquer, indépendamment du souci d'overlay.
+// Ce délai laisse le JS de validation du formulaire un instant pour activer le bouton avant de
+// le chercher/cliquer, indépendamment du souci d'overlay ci-dessus.
 const SUBMIT_BUTTON_READY_DELAY_MS = 500;
-
-async function debugLogSubmitButtonState(page: LoginPage): Promise<void> {
-  try {
-    const locator = page.locator(SUBMIT_SELECTOR);
-    const count = await locator.count();
-    const visible = count > 0 ? await locator.isVisible() : null;
-    const disabled = count > 0 ? await locator.isDisabled() : null;
-    const box = count > 0 ? await locator.boundingBox() : null;
-    const viewport = page.viewportSize();
-
-    console.log(
-      `[vintedLoginFlow][debug] SUBMIT_SELECTOR (${SUBMIT_SELECTOR}) -- count=${count} visible=${visible} disabled=${disabled} boundingBox=${JSON.stringify(box)} viewport=${JSON.stringify(viewport)}`
-    );
-  } catch (err) {
-    console.error("[vintedLoginFlow][debug] échec de la lecture de l'état du bouton de connexion:", err);
-  }
-}
-// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
@@ -289,15 +258,14 @@ export async function performVintedLogin(
     return classifyStepError(`remplissage du champ mot de passe (sélecteur: ${PASSWORD_SELECTOR})`, err);
   }
 
-  // DEBUG TEMPORAIRE -- voir commentaire sur SUBMIT_BUTTON_READY_DELAY_MS plus haut.
+  // Voir commentaire sur SUBMIT_BUTTON_READY_DELAY_MS plus haut.
   await sleep(submitButtonReadyDelayMs);
 
   try {
     // force: true -- voir commentaire sur SUBMIT_BUTTON_READY_DELAY_MS plus haut (overlay
-    // résiduel probable par-dessus un bouton par ailleurs confirmé visible/cliquable).
+    // résiduel par-dessus un bouton par ailleurs visible/cliquable).
     await page.click(SUBMIT_SELECTOR, { force: true });
   } catch (err) {
-    await debugLogSubmitButtonState(page); // DEBUG TEMPORAIRE -- garder encore un tour pour confirmer que le clic forcé fonctionne
     return classifyStepError(`clic sur le bouton de connexion (sélecteur: ${SUBMIT_SELECTOR})`, err);
   }
 

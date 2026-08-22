@@ -1,12 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  performVintedLogin,
-  type LoginPage,
-  type LoginPageCookie,
-  type LoginFrame,
-  type LoginLocator,
-} from "../src/vintedLoginFlow.js";
+import { performVintedLogin, type LoginPage, type LoginPageCookie, type LoginFrame } from "../src/vintedLoginFlow.js";
 
 // Timeouts réduits pour que les scénarios "timeout"/sondage restent rapides en test (voir
 // commentaire dans vintedLoginFlow.ts sur pourquoi ces valeurs sont exposées en paramètres).
@@ -39,34 +33,6 @@ function makeMockFrame(options: MockFrameOptions): LoginFrame {
   };
 }
 
-interface MockLocatorOptions {
-  count?: number;
-  visible?: boolean;
-  disabled?: boolean;
-  boundingBox?: { x: number; y: number; width: number; height: number } | null;
-}
-
-// Implémente LoginLocator à la main -- même principe que makeMockPage : aucun vrai navigateur.
-// Par défaut, un bouton bien présent/visible/actionnable (le cas "tout va bien").
-function makeMockLocator(options: MockLocatorOptions = {}): LoginLocator {
-  const { count = 1, visible = true, disabled = false, boundingBox = { x: 0, y: 0, width: 100, height: 40 } } = options;
-
-  return {
-    async count() {
-      return count;
-    },
-    async isVisible() {
-      return visible;
-    },
-    async isDisabled() {
-      return disabled;
-    },
-    async boundingBox() {
-      return boundingBox;
-    },
-  };
-}
-
 interface MockPageOptions {
   cookies?: LoginPageCookie[];
   html?: string;
@@ -77,8 +43,6 @@ interface MockPageOptions {
   clickOptionsCalls?: Array<{ selector: string; options: { force?: boolean } | undefined }>; // idem, avec les options passées
   frames?: LoginFrame[]; // iframes de la page, vide par défaut (voir makeMockFrame)
   failSubmitClick?: boolean; // ne s'applique qu'au clic sur le bouton de connexion (voir isSubmitSelector)
-  submitLocator?: MockLocatorOptions; // état du Locator renvoyé pour SUBMIT_SELECTOR (voir isSubmitSelector)
-  viewportSize?: { width: number; height: number } | null;
 }
 
 // Le sélecteur email (EMAIL_SELECTOR) est le seul, dans le code de prod, à contenir ce
@@ -106,8 +70,6 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     clickOptionsCalls,
     frames = [],
     failSubmitClick = false,
-    submitLocator = {},
-    viewportSize = { width: 1280, height: 720 },
   } = options;
 
   return {
@@ -142,12 +104,6 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     },
     frames() {
       return frames;
-    },
-    locator(selector) {
-      return isSubmitSelector(selector) ? makeMockLocator(submitLocator) : makeMockLocator();
-    },
-    viewportSize() {
-      return viewportSize;
     },
   };
 }
@@ -521,79 +477,9 @@ test("performVintedLogin - clique le bouton de connexion avec force: true (cas r
   assert.equal(submitClick?.options?.force, true, "le clic doit être forcé pour ignorer un overlay résiduel bloquant");
 });
 
-test("performVintedLogin - [debug] un clic qui échoue logge l'état du bouton (count/visible/disabled/boundingBox/viewport)", async (t) => {
-  const logSpy = t.mock.method(console, "log", () => {});
-  const page = makeMockPage({
-    failSubmitClick: true,
-    submitLocator: { count: 1, visible: true, disabled: true, boundingBox: { x: 10, y: 20, width: 120, height: 44 } },
-    viewportSize: { width: 1280, height: 720 },
-  });
-
-  const outcome = await performVintedLogin(
-    page,
-    "user@example.test",
-    "hunter2",
-    FAST_NAV_TIMEOUT_MS,
-    FAST_FORM_TIMEOUT_MS,
-    FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
-  );
-
-  assert.equal(outcome.status, "timeout");
-  const messages = logSpy.mock.calls.map((c) => String(c.arguments[0]));
-  assert.ok(
-    messages.some(
-      (m) => m.includes("count=1") && m.includes("visible=true") && m.includes("disabled=true") && m.includes('"width":120')
-    ),
-    "doit logger l'état complet du bouton (count/visible/disabled/boundingBox)"
-  );
-  assert.ok(messages.some((m) => m.includes('"width":1280')), "doit logger la taille du viewport");
-});
-
-test("performVintedLogin - [debug] count=0 (bouton absent) est loggé sans planter", async (t) => {
-  const logSpy = t.mock.method(console, "log", () => {});
-  const page = makeMockPage({
-    failSubmitClick: true,
-    submitLocator: { count: 0 },
-  });
-
-  const outcome = await performVintedLogin(
-    page,
-    "user@example.test",
-    "hunter2",
-    FAST_NAV_TIMEOUT_MS,
-    FAST_FORM_TIMEOUT_MS,
-    FAST_POST_SUBMIT_TIMEOUT_MS,
-    FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
-  );
-
-  assert.equal(outcome.status, "timeout");
-  assert.ok(logSpy.mock.calls.some((c) => String(c.arguments[0]).includes("count=0")));
-});
-
-test("performVintedLogin - [debug] un échec de lecture de l'état du bouton n'empêche pas la classification normale de l'erreur", async (t) => {
+test("performVintedLogin - un clic échoué sur le bouton de connexion est classé et loggé avec le bon sélecteur", async (t) => {
   const errorSpy = t.mock.method(console, "error", () => {});
-  const page: LoginPage = {
-    ...makeMockPage({ failSubmitClick: true }),
-    locator(_selector) {
-      return {
-        async count() {
-          throw new Error("locator introuvable");
-        },
-        async isVisible() {
-          return false;
-        },
-        async isDisabled() {
-          return false;
-        },
-        async boundingBox() {
-          return null;
-        },
-      };
-    },
-  };
+  const page = makeMockPage({ failSubmitClick: true });
 
   const outcome = await performVintedLogin(
     page,
@@ -608,7 +494,9 @@ test("performVintedLogin - [debug] un échec de lecture de l'état du bouton n'e
 
   assert.equal(outcome.status, "timeout");
   assert.ok(
-    errorSpy.mock.calls.some((c) => /échec de la lecture de l'état du bouton/.test(String(c.arguments[0]))),
-    "l'échec de la lecture doit être loggé, sans empêcher la classification normale de l'erreur"
+    errorSpy.mock.calls.some((c) =>
+      /clic sur le bouton de connexion.*button\[type="submit"\]:has-text\("Continuer"\)/.test(String(c.arguments[0]))
+    ),
+    "doit nommer précisément l'étape et le sélecteur qui ont échoué"
   );
 });
