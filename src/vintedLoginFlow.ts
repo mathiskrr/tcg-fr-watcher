@@ -18,7 +18,11 @@ export interface LoginPageContext {
 // acceptCookieConsentIfPresent de chercher indifféremment sur la page ou dans une frame.
 export interface LoginClickTarget {
   waitForSelector(selector: string, options?: { timeout?: number }): Promise<unknown>;
-  click(selector: string): Promise<void>;
+  // `force` (voir performVintedLogin) : ignore les vérifications d'actionabilité de
+  // Playwright (visibilité stricte, absence d'élément par-dessus) -- nécessaire quand un
+  // overlay résiduel invisible/transparent reste positionné par-dessus un élément par ailleurs
+  // réellement cliquable (confirmé manuellement).
+  click(selector: string, options?: { force?: boolean }): Promise<void>;
 }
 
 export interface LoginFrame extends LoginClickTarget {
@@ -34,7 +38,6 @@ export interface LoginLocator {
   isVisible(): Promise<boolean>;
   isDisabled(): Promise<boolean>;
   boundingBox(): Promise<{ x: number; y: number; width: number; height: number } | null>;
-  scrollIntoViewIfNeeded(options?: { timeout?: number }): Promise<void>;
 }
 
 export interface LoginPage extends LoginClickTarget {
@@ -142,15 +145,16 @@ async function acceptCookieConsentIfPresent(page: LoginPage): Promise<void> {
   }
 }
 
-// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
-// Le clic sur SUBMIT_SELECTOR (button[type="submit"]:has-text("Continuer")) time out encore
-// malgré un sélecteur désormais précis -- le bouton existe (confirmé par un dump précédent)
-// mais n'est peut-être pas "actionnable" pour Playwright : désactivé tant que le JS de la page
-// ne juge pas les champs valides, hors zone visible (scroll nécessaire), ou recouvert par un
-// autre élément. Piste 1 : laisser un court délai au JS de validation avant de chercher le
-// bouton. Piste 2 : le faire défiler dans la zone visible avant de cliquer. Les deux restent
-// actives même en cas de succès (pas seulement au moment du diagnostic) -- si l'une d'elles
-// s'avère être LA solution, il faudra la garder définitivement plutôt que la retirer.
+// Cas réel diagnostiqué : count=1, visible=true, disabled=false, boundingBox dans le viewport
+// -- tout semble normal côté Locator, mais scrollIntoViewIfNeeded() lui-même timeout (essayé
+// puis retiré, voir historique des commits) : signe qu'un élément invisible/transparent est
+// positionné par-dessus le bouton et bloque les interactions (résidu d'overlay de la popup
+// cookies, même après clic sur "Accepter tout"). D'où le clic en `force: true` ci-dessous, qui
+// ignore les vérifications d'actionabilité de Playwright -- gardé même en cas de succès (pas
+// seulement pour le diagnostic) : le contournement EST potentiellement la solution définitive.
+//
+// Ce délai reste actif en complément : laisse le JS de validation du formulaire un instant
+// pour activer le bouton avant de chercher/cliquer, indépendamment du souci d'overlay.
 const SUBMIT_BUTTON_READY_DELAY_MS = 500;
 
 async function debugLogSubmitButtonState(page: LoginPage): Promise<void> {
@@ -289,12 +293,11 @@ export async function performVintedLogin(
   await sleep(submitButtonReadyDelayMs);
 
   try {
-    // DEBUG TEMPORAIRE -- scrollIntoViewIfNeeded avant le clic, au cas où le bouton soit hors
-    // de la zone visible (voir commentaire plus haut).
-    await page.locator(SUBMIT_SELECTOR).scrollIntoViewIfNeeded({ timeout: formTimeoutMs });
-    await page.click(SUBMIT_SELECTOR);
+    // force: true -- voir commentaire sur SUBMIT_BUTTON_READY_DELAY_MS plus haut (overlay
+    // résiduel probable par-dessus un bouton par ailleurs confirmé visible/cliquable).
+    await page.click(SUBMIT_SELECTOR, { force: true });
   } catch (err) {
-    await debugLogSubmitButtonState(page); // DEBUG TEMPORAIRE -- voir commentaire plus haut
+    await debugLogSubmitButtonState(page); // DEBUG TEMPORAIRE -- garder encore un tour pour confirmer que le clic forcé fonctionne
     return classifyStepError(`clic sur le bouton de connexion (sélecteur: ${SUBMIT_SELECTOR})`, err);
   }
 

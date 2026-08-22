@@ -44,19 +44,12 @@ interface MockLocatorOptions {
   visible?: boolean;
   disabled?: boolean;
   boundingBox?: { x: number; y: number; width: number; height: number } | null;
-  failScrollIntoView?: boolean;
 }
 
 // Implémente LoginLocator à la main -- même principe que makeMockPage : aucun vrai navigateur.
 // Par défaut, un bouton bien présent/visible/actionnable (le cas "tout va bien").
 function makeMockLocator(options: MockLocatorOptions = {}): LoginLocator {
-  const {
-    count = 1,
-    visible = true,
-    disabled = false,
-    boundingBox = { x: 0, y: 0, width: 100, height: 40 },
-    failScrollIntoView = false,
-  } = options;
+  const { count = 1, visible = true, disabled = false, boundingBox = { x: 0, y: 0, width: 100, height: 40 } } = options;
 
   return {
     async count() {
@@ -71,9 +64,6 @@ function makeMockLocator(options: MockLocatorOptions = {}): LoginLocator {
     async boundingBox() {
       return boundingBox;
     },
-    async scrollIntoViewIfNeeded(_opts) {
-      if (failScrollIntoView) throw new Error("locator.scrollIntoViewIfNeeded: Timeout 30000ms exceeded");
-    },
   };
 }
 
@@ -84,6 +74,7 @@ interface MockPageOptions {
   failWaitForSelector?: boolean; // ne s'applique qu'au sélecteur email (voir isEmailSelector)
   cookiePopupPresent?: boolean; // si true, le waitForSelector du consentement cookies "réussit" (sur la page principale)
   clickCalls?: string[]; // rempli au fil des appels à click() sur la page principale, si fourni
+  clickOptionsCalls?: Array<{ selector: string; options: { force?: boolean } | undefined }>; // idem, avec les options passées
   frames?: LoginFrame[]; // iframes de la page, vide par défaut (voir makeMockFrame)
   failSubmitClick?: boolean; // ne s'applique qu'au clic sur le bouton de connexion (voir isSubmitSelector)
   submitLocator?: MockLocatorOptions; // état du Locator renvoyé pour SUBMIT_SELECTOR (voir isSubmitSelector)
@@ -112,6 +103,7 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     failWaitForSelector = false,
     cookiePopupPresent = false,
     clickCalls,
+    clickOptionsCalls,
     frames = [],
     failSubmitClick = false,
     submitLocator = {},
@@ -123,7 +115,8 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
       if (failGoto) throw new Error("Timeout 50ms exceeded while navigating");
     },
     async fill(_selector, _value) {},
-    async click(selector) {
+    async click(selector, options) {
+      clickOptionsCalls?.push({ selector, options });
       if (isSubmitSelector(selector) && failSubmitClick) {
         throw new Error("locator.click: Timeout 30000ms exceeded");
       }
@@ -504,19 +497,12 @@ test("performVintedLogin - clique bien le bouton 'Continuer' précis (pas un des
   assert.deepEqual(clickCalls, ['button[type="submit"]:has-text("Continuer")']);
 });
 
-test("performVintedLogin - fait défiler le bouton dans la zone visible avant de cliquer", async () => {
-  let scrollCalled = false;
-  const page: LoginPage = {
-    ...makeMockPage({ cookies: [{ name: "access_token_web", value: "token-scroll-ok" }] }),
-    locator(selector) {
-      return {
-        ...makeMockLocator(),
-        async scrollIntoViewIfNeeded(_opts) {
-          scrollCalled = true;
-        },
-      };
-    },
-  };
+test("performVintedLogin - clique le bouton de connexion avec force: true (cas réel diagnostiqué : overlay résiduel bloquant)", async () => {
+  const clickOptionsCalls: Array<{ selector: string; options: { force?: boolean } | undefined }> = [];
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "token-force-click" }],
+    clickOptionsCalls,
+  });
 
   const outcome = await performVintedLogin(
     page,
@@ -529,8 +515,10 @@ test("performVintedLogin - fait défiler le bouton dans la zone visible avant de
     FAST_SUBMIT_READY_DELAY_MS
   );
 
-  assert.deepEqual(outcome, { status: "success", token: "token-scroll-ok" });
-  assert.equal(scrollCalled, true, "scrollIntoViewIfNeeded doit être appelé avant le clic sur le bouton de connexion");
+  assert.deepEqual(outcome, { status: "success", token: "token-force-click" });
+  const submitClick = clickOptionsCalls.find((c) => isSubmitSelector(c.selector));
+  assert.ok(submitClick, "un clic sur le bouton de connexion doit avoir eu lieu");
+  assert.equal(submitClick?.options?.force, true, "le clic doit être forcé pour ignorer un overlay résiduel bloquant");
 });
 
 test("performVintedLogin - [debug] un clic qui échoue logge l'état du bouton (count/visible/disabled/boundingBox/viewport)", async (t) => {
@@ -603,7 +591,6 @@ test("performVintedLogin - [debug] un échec de lecture de l'état du bouton n'e
         async boundingBox() {
           return null;
         },
-        async scrollIntoViewIfNeeded() {},
       };
     },
   };
