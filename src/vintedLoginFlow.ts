@@ -15,14 +15,29 @@ export interface LoginPageContext {
   cookies(): Promise<LoginPageCookie[]>;
 }
 
-export interface LoginPage {
+// Sous-ensemble commun à LoginPage et LoginFrame -- les CMP de cookies (OneTrust, Didomi...)
+// rendent souvent leur bandeau dans un iframe, invisible aux sélecteurs cherchés sur la page
+// principale (voir findCookieConsentFrame) : cette interface permet à
+// acceptCookieConsentIfPresent de chercher indifféremment sur la page ou dans une frame.
+export interface LoginClickTarget {
+  waitForSelector(selector: string, options?: { timeout?: number }): Promise<unknown>;
+  click(selector: string): Promise<void>;
+}
+
+export interface LoginFrame extends LoginClickTarget {
+  url(): string;
+  name(): string;
+}
+
+export interface LoginPage extends LoginClickTarget {
   goto(url: string, options?: { timeout?: number }): Promise<unknown>;
   fill(selector: string, value: string): Promise<void>;
-  click(selector: string): Promise<void>;
-  waitForSelector(selector: string, options?: { timeout?: number }): Promise<unknown>;
   content(): Promise<string>;
   context(): LoginPageContext;
   screenshot(options: { path: string }): Promise<unknown>;
+  frames(): LoginFrame[];
+  // Exécuté dans le contexte du navigateur (pas Node) -- voir debugLogInputAttributes.
+  evaluate<T>(pageFunction: () => T): Promise<T>;
 }
 
 export type LoginOutcome =
@@ -105,17 +120,92 @@ const COOKIE_CONSENT_SELECTOR = [
 // scénario qui ne se présente qu'une partie du temps.
 const COOKIE_CONSENT_TIMEOUT_MS = 5_000;
 
+// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
+// "aucune popup détectée" persistant malgré la confirmation visuelle du bandeau (capture
+// d'écran) -- piste probable : le bandeau est rendu dans un iframe (courant pour les CMP
+// comme OneTrust/Didomi), donc invisible aux sélecteurs cherchés sur page.waitForSelector
+// (qui ne regarde que le document principal, jamais l'intérieur des iframes). Liste tous les
+// iframes présents pour confirmer/infirmer cette piste. À RETIRER une fois la cause confirmée.
+async function debugLogFrames(page: LoginPage): Promise<void> {
+  const frames = page.frames();
+  console.log(`[vintedLoginFlow][debug] ${frames.length} frame(s) détectée(s) sur la page:`);
+  for (const frame of frames) {
+    console.log(`[vintedLoginFlow][debug]   - name="${frame.name()}" url="${frame.url()}"`);
+  }
+}
+// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
+
+// Motifs d'URL des CMP (Consent Management Platform) de cookies les plus courants -- best
+// effort, comme le reste des sélecteurs de ce fichier : cible l'iframe qui héberge RÉELLEMENT
+// le bandeau, plutôt que de chercher en vain sur le document principal.
+const CMP_FRAME_URL_PATTERN = /onetrust|cookiebot|didomi|trustarc|cookielaw|cookie-?consent|privacy-center/i;
+
+function findCookieConsentFrame(page: LoginPage): LoginFrame | null {
+  return page.frames().find((frame) => CMP_FRAME_URL_PATTERN.test(frame.url())) ?? null;
+}
+
 // Ne lève JAMAIS d'exception : l'absence de popup n'est pas une erreur, et une popup présente
 // mais non cliquée avec succès ne doit pas non plus bloquer la suite (best-effort pur).
+// Cherche le bouton dans l'iframe du CMP si une frame correspondante est détectée (voir
+// findCookieConsentFrame), sinon sur la page principale (cas où le bandeau n'est pas dans un
+// iframe, ou CMP non reconnu par CMP_FRAME_URL_PATTERN).
 async function acceptCookieConsentIfPresent(page: LoginPage): Promise<void> {
+  await debugLogFrames(page); // DEBUG TEMPORAIRE -- voir commentaire plus haut
+
+  const cmpFrame = findCookieConsentFrame(page);
+  const searchTarget: LoginClickTarget = cmpFrame ?? page;
+
+  if (cmpFrame) {
+    console.log(`[vintedLoginFlow] iframe de CMP cookies détectée (url: ${cmpFrame.url()}), recherche dans cette frame`);
+  }
+
   try {
-    await page.waitForSelector(COOKIE_CONSENT_SELECTOR, { timeout: COOKIE_CONSENT_TIMEOUT_MS });
-    await page.click(COOKIE_CONSENT_SELECTOR);
+    await searchTarget.waitForSelector(COOKIE_CONSENT_SELECTOR, { timeout: COOKIE_CONSENT_TIMEOUT_MS });
+    await searchTarget.click(COOKIE_CONSENT_SELECTOR);
     console.log("[vintedLoginFlow] popup de consentement cookies détectée et acceptée");
   } catch {
     console.log("[vintedLoginFlow] aucune popup de consentement cookies détectée (ou déjà acceptée) -- on continue");
   }
 }
+
+// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
+// Le formulaire est bien visible sur la capture (email + mot de passe affichés) mais
+// EMAIL_SELECTOR (input[name="email"], input[type="email"]) time out quand même après 30s --
+// signe que ni l'attribut "name" ni "type" ne valent "email" sur le vrai champ. Liste TOUS les
+// attributs pertinents (name, id, type, placeholder, aria-label) de chaque <input> de la page
+// au moment de l'échec, pour identifier le vrai sélecteur à utiliser. À RETIRER une fois le
+// bon sélecteur trouvé.
+interface DebugInputSnapshot {
+  name: string | null;
+  id: string | null;
+  type: string | null;
+  placeholder: string | null;
+  ariaLabel: string | null;
+}
+
+async function debugLogInputAttributes(page: LoginPage): Promise<void> {
+  try {
+    const inputs = await page.evaluate<DebugInputSnapshot[]>(() =>
+      Array.from(document.querySelectorAll("input")).map((el) => ({
+        name: el.getAttribute("name"),
+        id: el.getAttribute("id"),
+        type: el.getAttribute("type"),
+        placeholder: el.getAttribute("placeholder"),
+        ariaLabel: el.getAttribute("aria-label"),
+      }))
+    );
+
+    console.log(`[vintedLoginFlow][debug] ${inputs.length} <input> trouvé(s) sur la page:`);
+    inputs.forEach((input, i) => {
+      console.log(
+        `[vintedLoginFlow][debug]   [${i}] name=${input.name} id=${input.id} type=${input.type} placeholder=${input.placeholder} aria-label=${input.ariaLabel}`
+      );
+    });
+  } catch (err) {
+    console.error("[vintedLoginFlow][debug] échec de la lecture des <input> de la page:", err);
+  }
+}
+// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
@@ -216,6 +306,7 @@ export async function performVintedLogin(
   try {
     await page.waitForSelector(EMAIL_SELECTOR, { timeout: formTimeoutMs });
   } catch (err) {
+    await debugLogInputAttributes(page); // DEBUG TEMPORAIRE -- voir commentaire plus haut
     return classifyStepError(`attente du champ email (sélecteur: ${EMAIL_SELECTOR})`, err);
   }
 
