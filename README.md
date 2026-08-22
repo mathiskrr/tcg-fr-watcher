@@ -404,8 +404,11 @@ comme avant, avec le seul système manuel.
 - Aucun mot de passe n'est jamais loggé, y compris dans les branches d'erreur.
 - Programmé via `setInterval` (pas une expression cron) : 90 minutes ne correspond à aucun
   motif calendaire simple, contrairement au cycle de vérification des annonces (`*/10 * * * *`).
-  Pas d'exécution immédiate au démarrage du process (un token valide est probablement déjà
-  configuré) — seulement à partir du premier intervalle écoulé.
+- **Un premier essai part immédiatement au démarrage du process**, en plus du cycle toutes les
+  90 min — pratique pour valider tout de suite qu'un login fonctionne (nouveaux identifiants,
+  déploiement...) sans attendre le premier intervalle. Contrepartie : un redémarrage fréquent du
+  process (crash-loop PM2, déploiements répétés) déclenche un login Playwright à chaque fois —
+  à garder en tête vu le risque de détection anti-bot déjà évoqué plus haut.
 
 ### Installer Playwright + Chromium sur le serveur (Rocky Linux)
 

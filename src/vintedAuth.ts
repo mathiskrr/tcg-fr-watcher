@@ -84,7 +84,13 @@ const RENEWAL_INTERVAL_MS = 90 * 60 * 1000;
 
 let renewalTimer: NodeJS.Timeout | null = null;
 
-export function startAutoTokenRenewal(intervalMs = RENEWAL_INTERVAL_MS): void {
+// `renew` injectable (au lieu d'appeler directement renewVintedTokenViaLogin) pour rester
+// testable sans navigateur réel : les tests passent un faux renouvellement et vérifient qu'il
+// est bien appelé immédiatement, sans jamais déclencher un vrai login Playwright.
+export function startAutoTokenRenewal(
+  intervalMs = RENEWAL_INTERVAL_MS,
+  renew: () => Promise<void> = renewVintedTokenViaLogin
+): void {
   if (!config.vintedEmail || !config.vintedPassword) {
     console.log(
       "[vintedAuth] VINTED_EMAIL/VINTED_PASSWORD non définis -- renouvellement automatique désactivé (fallback: POST /token manuel)"
@@ -92,14 +98,19 @@ export function startAutoTokenRenewal(intervalMs = RENEWAL_INTERVAL_MS): void {
     return;
   }
 
-  // Pas d'exécution immédiate au démarrage : un token valide est probablement déjà configuré
-  // (VINTED_ACCESS_TOKEN_WEB ou dernier renouvellement manuel/auto) -- inutile de risquer un
-  // login Playwright supplémentaire à chaque redémarrage du process.
+  // Appel immédiat au démarrage, EN PLUS du cycle périodique ci-dessous : permet de valider
+  // tout de suite qu'un login fonctionne (identifiants valides, sélecteurs Vinted toujours
+  // d'actualité...) sans attendre 90 min à chaque test/déploiement. Contrepartie assumée : un
+  // login Playwright de plus à chaque redémarrage du process (voir README, section risques).
+  renew().catch((err) => console.error("[vintedAuth] erreur au renouvellement immédiat du démarrage:", err));
+
   renewalTimer = setInterval(() => {
-    renewVintedTokenViaLogin().catch((err) => console.error("[vintedAuth] erreur cycle de renouvellement auto:", err));
+    renew().catch((err) => console.error("[vintedAuth] erreur cycle de renouvellement auto:", err));
   }, intervalMs);
 
-  console.log(`[vintedAuth] renouvellement automatique du token Vinted armé (toutes les ${Math.round(intervalMs / 60_000)} min)`);
+  console.log(
+    `[vintedAuth] renouvellement automatique du token Vinted armé (immédiat + toutes les ${Math.round(intervalMs / 60_000)} min)`
+  );
 }
 
 export function stopAutoTokenRenewal(): void {

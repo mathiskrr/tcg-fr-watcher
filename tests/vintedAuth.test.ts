@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyLoginOutcome, startAutoTokenRenewal, stopAutoTokenRenewal } from "../src/vintedAuth.js";
 import { getVintedAccessToken, setVintedAccessToken } from "../src/tokenStore.js";
+import { config } from "../src/config.js";
 import type { LoginOutcome } from "../src/vintedLoginFlow.js";
 
 // Ce fichier n'importe/n'appelle jamais chromium.launch() : applyLoginOutcome et
@@ -93,4 +94,30 @@ test("startAutoTokenRenewal - sans VINTED_EMAIL/VINTED_PASSWORD, n'arme aucun mi
   );
 
   stopAutoTokenRenewal(); // no-op ici (rien n'a été armé) : vérifie surtout que l'appel ne plante pas
+});
+
+test("startAutoTokenRenewal - avec identifiants configurés, appelle immédiatement le renouvellement (pas seulement au bout de l'intervalle)", (t) => {
+  // config est un objet mutable (pas de migration de données, pas Object.freeze) : on force
+  // temporairement des identifiants pour exercer le chemin "activé" sans dépendre de vraies
+  // variables d'env, puis on restaure -- comme startAutoTokenRenewal accepte `renew` en
+  // injection, ce test ne lance jamais de vrai navigateur (fakeRenew ci-dessous).
+  const originalEmail = config.vintedEmail;
+  const originalPassword = config.vintedPassword;
+  config.vintedEmail = "test@example.test";
+  config.vintedPassword = "un-mot-de-passe-de-test";
+
+  let callCount = 0;
+  const fakeRenew = async () => {
+    callCount++;
+  };
+
+  try {
+    startAutoTokenRenewal(90 * 60 * 1000, fakeRenew);
+
+    assert.equal(callCount, 1, "doit appeler le renouvellement immédiatement, sans attendre le premier intervalle");
+  } finally {
+    stopAutoTokenRenewal(); // évite qu'un minuteur de 90 min ne garde le process de test ouvert
+    config.vintedEmail = originalEmail;
+    config.vintedPassword = originalPassword;
+  }
 });
