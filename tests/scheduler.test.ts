@@ -4,12 +4,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   selectCheapestN,
-  hasTop3Changed,
+  diffAlertedItems,
   vintedQueries,
   dedupeByItemId,
   type Candidate,
 } from "../src/scheduler.js";
 import type { MarketplaceItem } from "../src/types.js";
+import type { AlertedItem } from "../src/db.js";
 
 function makeItem(itemId: string, title = `Item ${itemId}`): MarketplaceItem {
   return { itemId, title, price: 10, currency: "EUR", url: `https://example.test/${itemId}`, imageUrl: null };
@@ -139,33 +140,72 @@ test("dedupeByItemId - liste vide de listes -> résultat vide", () => {
   assert.deepEqual(dedupeByItemId([]), []);
 });
 
-test("hasTop3Changed - jamais envoyé auparavant (lastIds null) -> toujours considéré changé", () => {
-  assert.equal(hasTop3Changed(["a", "b", "c"], null), true);
+function makeAlerted(itemId: string, source = "vinted"): AlertedItem {
+  return { itemKey: `${source}:${itemId}`, messageId: `msg-${itemId}` };
+}
+
+test("diffAlertedItems - jamais alerté auparavant (previous null) -> tout le top est à ajouter", () => {
+  const current = [makeCandidate("a", 10), makeCandidate("b", 20)];
+  const diff = diffAlertedItems(current, null);
+
+  assert.deepEqual(diff.toDelete, []);
+  assert.deepEqual(diff.toKeep, []);
+  assert.deepEqual(
+    diff.toAdd.map((c) => c.item.itemId),
+    ["a", "b"]
+  );
 });
 
-test("hasTop3Changed - même trio d'ids, même ordre -> pas changé", () => {
-  assert.equal(hasTop3Changed(["a", "b", "c"], ["a", "b", "c"]), false);
+test("diffAlertedItems - même trio, même ordre -> tout en toKeep, rien à ajouter/supprimer", () => {
+  const current = [makeCandidate("a", 10), makeCandidate("b", 20), makeCandidate("c", 30)];
+  const previous = [makeAlerted("a"), makeAlerted("b"), makeAlerted("c")];
+
+  const diff = diffAlertedItems(current, previous);
+
+  assert.deepEqual(diff.toAdd, []);
+  assert.deepEqual(diff.toDelete, []);
+  assert.deepEqual(
+    diff.toKeep.map((p) => p.itemKey),
+    ["vinted:a", "vinted:b", "vinted:c"]
+  );
 });
 
-test("hasTop3Changed - même trio d'ids, ordre différent -> pas changé (seule la composition compte)", () => {
-  assert.equal(hasTop3Changed(["a", "b", "c"], ["c", "a", "b"]), false);
+test("diffAlertedItems - même trio, ordre différent -> toujours rien à ajouter/supprimer (seule la composition compte)", () => {
+  const current = [makeCandidate("c", 5), makeCandidate("a", 10), makeCandidate("b", 20)];
+  const previous = [makeAlerted("a"), makeAlerted("b"), makeAlerted("c")];
+
+  const diff = diffAlertedItems(current, previous);
+
+  assert.deepEqual(diff.toAdd, []);
+  assert.deepEqual(diff.toDelete, []);
+  assert.equal(diff.toKeep.length, 3);
 });
 
-test("hasTop3Changed - un item différent -> changé", () => {
-  assert.equal(hasTop3Changed(["a", "b", "d"], ["a", "b", "c"]), true);
+test("diffAlertedItems - un item sort, un autre entre -> l'un en toDelete (avec son messageId), l'autre en toAdd", () => {
+  const current = [makeCandidate("d", 5), makeCandidate("b", 20), makeCandidate("c", 30)];
+  const previous = [makeAlerted("a"), makeAlerted("b"), makeAlerted("c")];
+
+  const diff = diffAlertedItems(current, previous);
+
+  assert.deepEqual(diff.toDelete, [{ itemKey: "vinted:a", messageId: "msg-a" }]);
+  assert.deepEqual(
+    diff.toAdd.map((c) => c.item.itemId),
+    ["d"]
+  );
+  assert.deepEqual(
+    diff.toKeep.map((p) => p.itemKey),
+    ["vinted:b", "vinted:c"]
+  );
 });
 
-test("hasTop3Changed - tailles différentes -> changé", () => {
-  assert.equal(hasTop3Changed(["a", "b"], ["a", "b", "c"]), true);
-});
-
-test("scénario 2 cycles : le top 3 se recalcule sur l'ensemble des résultats, l'alerte ne repart que si sa composition change", () => {
+test("scénario 2 cycles : un item qui reste dans le top garde son message existant, seuls les entrants/sortants bougent", () => {
   // Simule le comportement de alertCheapestForSource : le top 3 est recalculé sur TOUS les
-  // résultats du cycle (pas de filtre "déjà vu" en amont), et on ne renvoie les 3 alertes
-  // que si l'ensemble des 3 ids diffère du dernier envoi pour cette entrée+source.
-  let lastAlertedIds: string[] | null = null;
+  // résultats du cycle (pas de filtre "déjà vu" en amont), mais seuls les items dont la
+  // présence dans ce top change déclenchent un envoi (toAdd) ou une suppression (toDelete) -
+  // un item qui y reste (toKeep) n'est ni renvoyé ni supprimé.
+  let lastAlerted: AlertedItem[] | null = null;
 
-  // Cycle 1 : 5 annonces disponibles, jamais alerté avant -> envoi des 3 moins chères.
+  // Cycle 1 : 5 annonces disponibles, jamais alerté avant -> les 3 moins chères sont neuves.
   const cycle1 = [
     makeCandidate("a", 10),
     makeCandidate("b", 20),
@@ -174,25 +214,27 @@ test("scénario 2 cycles : le top 3 se recalcule sur l'ensemble des résultats, 
     makeCandidate("e", 50),
   ];
   const top1 = selectCheapestN(cycle1, 3);
-  const ids1 = top1.map((c) => c.itemKey);
-  const changed1 = hasTop3Changed(ids1, lastAlertedIds);
-  if (changed1) lastAlertedIds = ids1;
+  const diff1 = diffAlertedItems(top1, lastAlerted);
+  assert.deepEqual(
+    diff1.toAdd.map((c) => c.item.itemId),
+    ["a", "b", "c"]
+  );
+  assert.deepEqual(diff1.toDelete, []);
+  // Simule l'envoi : chaque item ajouté obtient un messageId, fusionné avec toKeep (vide ici).
+  lastAlerted = [...diff1.toKeep, ...diff1.toAdd.map((c) => makeAlerted(c.item.itemId))];
 
-  assert.deepEqual(top1.map((c) => c.item.itemId), ["a", "b", "c"]);
-  assert.equal(changed1, true, "1er envoi pour cette entrée -> toujours considéré changé");
-
-  // Cycle 2 : mêmes 5 annonces, rien n'a changé -> le top 3 recalculé est identique -> pas
-  // de nouvel envoi, même si on "recalcule tout" à chaque cycle.
+  // Cycle 2 : mêmes 5 annonces, rien n'a changé -> le top 3 recalculé est identique -> aucun
+  // ajout ni suppression, même si on "recalcule tout" à chaque cycle.
   const top2 = selectCheapestN(cycle1, 3);
-  const ids2 = top2.map((c) => c.itemKey);
-  const changed2 = hasTop3Changed(ids2, lastAlertedIds);
+  const diff2 = diffAlertedItems(top2, lastAlerted);
 
-  assert.deepEqual(top2.map((c) => c.item.itemId), ["a", "b", "c"]);
-  assert.equal(changed2, false, "même top 3 qu'au dernier envoi -> aucune alerte");
+  assert.deepEqual(diff2.toAdd, []);
+  assert.deepEqual(diff2.toDelete, []);
+  assert.equal(diff2.toKeep.length, 3, "même top 3 qu'au dernier envoi -> tout en toKeep");
 
   // Cycle 3 : "a" a disparu (vendue), une nouvelle annonce "f" à 5€ apparaît moins chère que
-  // tout le reste -> le top 3 change de composition -> les 3 alertes repartent EN ENTIER
-  // (pas seulement "f").
+  // tout le reste -> SEUL "a" est supprimé et SEUL "f" est envoyé ; "b" et "c" restent en
+  // place sans être retouchés.
   const cycle3 = [
     makeCandidate("f", 5),
     makeCandidate("b", 20),
@@ -201,16 +243,25 @@ test("scénario 2 cycles : le top 3 se recalcule sur l'ensemble des résultats, 
     makeCandidate("e", 50),
   ];
   const top3 = selectCheapestN(cycle3, 3);
-  const ids3 = top3.map((c) => c.itemKey);
-  const changed3 = hasTop3Changed(ids3, lastAlertedIds);
-  if (changed3) lastAlertedIds = ids3;
+  const diff3 = diffAlertedItems(top3, lastAlerted);
 
-  assert.deepEqual(top3.map((c) => c.item.itemId), ["f", "b", "c"]);
-  assert.equal(changed3, true, "'a' est sorti du top 3, 'f' y est entré -> composition changée");
+  assert.deepEqual(
+    diff3.toDelete.map((p) => p.itemKey),
+    ["vinted:a"]
+  );
+  assert.deepEqual(
+    diff3.toAdd.map((c) => c.item.itemId),
+    ["f"]
+  );
+  assert.deepEqual(
+    diff3.toKeep.map((p) => p.itemKey),
+    ["vinted:b", "vinted:c"]
+  );
+  lastAlerted = [...diff3.toKeep, ...diff3.toAdd.map((c) => makeAlerted(c.item.itemId))];
 
   // Cycle 4 : même composition que le cycle 3 mais "c" est maintenant moins cher que "b"
-  // (permutation de prix entre les mêmes 3 items) -> toujours les mêmes 3 ids -> pas de
-  // nouvel envoi (seule la composition du top 3 compte, pas le rang de prix entre eux).
+  // (permutation de prix entre les mêmes 3 items) -> toujours les mêmes 3 items -> rien à
+  // ajouter/supprimer (seule la composition du top 3 compte, pas le rang de prix entre eux).
   const cycle4 = [
     makeCandidate("f", 5),
     makeCandidate("b", 35),
@@ -219,9 +270,10 @@ test("scénario 2 cycles : le top 3 se recalcule sur l'ensemble des résultats, 
     makeCandidate("e", 50),
   ];
   const top4 = selectCheapestN(cycle4, 3);
-  const ids4 = top4.map((c) => c.itemKey);
-  const changed4 = hasTop3Changed(ids4, lastAlertedIds);
+  const diff4 = diffAlertedItems(top4, lastAlerted);
 
   assert.deepEqual(top4.map((c) => c.item.itemId), ["f", "c", "b"]); // "c" et "b" permutés
-  assert.equal(changed4, false, "mêmes 3 items, juste réordonnés par prix -> aucune alerte");
+  assert.deepEqual(diff4.toAdd, []);
+  assert.deepEqual(diff4.toDelete, []);
+  assert.equal(diff4.toKeep.length, 3, "mêmes 3 items, juste réordonnés par prix -> aucun changement");
 });

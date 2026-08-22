@@ -4,8 +4,8 @@ import { config } from "./config.js";
 import { searchEbay } from "./ebay.js";
 import { searchVinted } from "./vinted.js";
 import { isFrenchTitle, isSealed, isSealedProductEntry, type LanguageFilterMode } from "./matcher.js";
-import { getLastAlertedTop3, setLastAlertedTop3 } from "./db.js";
-import { sendNewListingAlert } from "./discord.js";
+import { getLastAlertedItems, setLastAlertedItems, type AlertedItem } from "./db.js";
+import { sendNewListingAlert, deleteListingAlert } from "./discord.js";
 import type { MarketplaceItem } from "./types.js";
 
 export interface WatchlistEntry {
@@ -23,13 +23,14 @@ export interface WatchlistEntry {
 
 // Chaque cycle recalcule intégralement les TOP_N_PER_ENTRY annonces FR les moins chères
 // actuellement disponibles pour l'entrée, sur l'ensemble des résultats du cycle (pas de
-// dédup par item individuel). Anti-spam : on ne (ré)envoie les 3 alertes que si la
-// COMPOSITION du top 3 a changé depuis le dernier envoi pour cette entrée+source (un item
-// différent y entre ou en sort) — voir hasTop3Changed / db.ts last_alerted_top3. Si le top 3
-// est identique au dernier envoi (mêmes 3 items, peu importe l'ordre ou leur rang de prix
-// exact entre eux), rien n'est renvoyé ce cycle-là.
+// dédup par item individuel). Anti-spam PAR ITEM (pas par "tout ou rien" du top 3 entier) :
+// un item qui reste dans le top 3 d'un cycle à l'autre garde son message Discord existant
+// (pas de renvoi) ; un item qui en SORT voit son message supprimé (voir deleteListingAlert) ;
+// seul un item qui y ENTRE nouvellement déclenche un envoi — voir diffAlertedItems / db.ts
+// last_alerted_items (stocke aussi le messageId Discord de chaque item pour pouvoir le
+// supprimer).
 // Le classement est fait PAR SOURCE (3 moins chères eBay + 3 moins chères Vinted,
-// séparément, avec leur propre "dernier top 3 envoyé") et non sur un pool combiné : les deux
+// séparément, avec leur propre historique d'alertes) et non sur un pool combiné : les deux
 // marketplaces ont des dynamiques de prix différentes, mélanger reviendrait à laisser l'une
 // éclipser systématiquement l'autre.
 const TOP_N_PER_ENTRY = 3;
@@ -68,18 +69,33 @@ export function selectCheapestN(items: Candidate[], n: number): Candidate[] {
   return [...items].sort((a, b) => a.item.price - b.item.price).slice(0, n);
 }
 
-// Fonction pure : compare le top N courant (ids) au dernier top N réellement envoyé pour
-// cette entrée+source. Comparaison en ENSEMBLE : seule la composition du top 3 compte (quels
-// items en font partie), pas l'ordre entre eux ni leur rang de prix exact — un même trio
-// d'items, même reclassé entre eux par le prix, ne redéclenche pas d'envoi. Un item qui
-// entre ou sort du top 3 (nouvelle annonce moins chère, annonce vendue...) déclenche un envoi.
-// `lastIds === null` (jamais envoyé pour cette entrée+source) compte toujours comme changé.
-export function hasTop3Changed(currentIds: string[], lastIds: string[] | null): boolean {
-  if (lastIds === null) return true;
-  if (currentIds.length !== lastIds.length) return true;
+export interface AlertDiff {
+  // Items précédemment alertés qui ne sont plus dans le top N courant -> leur message Discord
+  // doit être supprimé (voir deleteListingAlert).
+  toDelete: AlertedItem[];
+  // Items du top N courant qui n'étaient pas alertés précédemment -> doivent être envoyés.
+  toAdd: Candidate[];
+  // Items présents dans le top N courant ET précédemment alertés -> rien à faire, on garde
+  // simplement leur messageId existant pour la prochaine comparaison.
+  toKeep: AlertedItem[];
+}
 
-  const lastSet = new Set(lastIds);
-  return !currentIds.every((id) => lastSet.has(id));
+// Fonction pure (pas d'I/O) : compare le top N courant au dernier état réellement envoyé pour
+// cette entrée+source, et retourne les 3 sous-ensembles à traiter. Comparaison en ENSEMBLE :
+// seule la composition du top N compte (quels items en font partie), pas l'ordre entre eux ni
+// leur rang de prix exact -- un item qui reste dans le top N même reclassé par le prix ne
+// redéclenche ni envoi ni suppression (voir toKeep). `previous === null` (jamais alerté pour
+// cette entrée+source) : tout le top N courant est neuf (aucun toDelete/toKeep possible).
+export function diffAlertedItems(current: Candidate[], previous: AlertedItem[] | null): AlertDiff {
+  const previousItems = previous ?? [];
+  const previousByKey = new Map(previousItems.map((p) => [p.itemKey, p]));
+  const currentKeys = new Set(current.map((c) => c.itemKey));
+
+  return {
+    toDelete: previousItems.filter((p) => !currentKeys.has(p.itemKey)),
+    toAdd: current.filter((c) => !previousByKey.has(c.itemKey)),
+    toKeep: previousItems.filter((p) => currentKeys.has(p.itemKey)),
+  };
 }
 
 // Filtre langue (+ produit scellé le cas échéant) sur TOUS les résultats d'une source pour
@@ -110,37 +126,51 @@ function filterFrenchMatches(
   return matches;
 }
 
-// Calcule le top N moins chères pour UNE source et n'envoie les alertes que si sa
-// composition a changé depuis le dernier envoi pour cette entrée+source (voir
-// hasTop3Changed). Si elle a changé, les N alertes sont renvoyées EN ENTIER (pas seulement
-// la différence), pour toujours voir les N vraies moins chères ensemble dans Discord.
+// Calcule le top N moins chères pour UNE source et ne touche Discord que pour les items dont
+// la présence dans ce top N a changé depuis le dernier cycle (voir diffAlertedItems) : envoi
+// pour les nouveaux entrants, suppression du message pour ceux qui en sont sortis, rien pour
+// ceux qui y restent.
 async function alertCheapestForSource(entry: WatchlistEntry, source: string, matches: Candidate[]): Promise<void> {
   if (matches.length === 0) return;
 
   const cheapest = selectCheapestN(matches, TOP_N_PER_ENTRY);
   const entryKey = `${source}:${entry.name}`;
-  const currentIds = cheapest.map((c) => c.itemKey);
-  const lastIds = getLastAlertedTop3(entryKey);
+  const previous = getLastAlertedItems(entryKey);
+  const { toDelete, toAdd, toKeep } = diffAlertedItems(cheapest, previous);
 
-  if (!hasTop3Changed(currentIds, lastIds)) {
+  if (toDelete.length === 0 && toAdd.length === 0) {
     console.log(`[scheduler] top ${cheapest.length} (${source}) inchangé pour ${entry.name}, aucune alerte`);
     return;
   }
 
   console.log(
-    `[scheduler] top ${cheapest.length} (${source}) modifié pour ${entry.name} — envoi des ${cheapest.length} alertes`
+    `[scheduler] top ${cheapest.length} (${source}) modifié pour ${entry.name} — ${toAdd.length} nouvelle(s) alerte(s), ${toDelete.length} message(s) obsolète(s) à supprimer`
   );
 
-  for (const { itemKey, item, reason } of cheapest) {
-    console.log(`[scheduler] annonce du top ${cheapest.length} (${source}): "${item.title}" à ${item.price}€ (${reason})`);
+  for (const { itemKey, messageId } of toDelete) {
+    console.log(`[scheduler] suppression du message Discord pour ${itemKey} (${source}, sorti du top ${cheapest.length})`);
     try {
-      await sendNewListingAlert(item, entry);
+      await deleteListingAlert(messageId);
+    } catch (err) {
+      console.error(`[scheduler] échec suppression Discord pour ${itemKey}:`, err);
+    }
+  }
+
+  const added: AlertedItem[] = [];
+  for (const { itemKey, item, reason } of toAdd) {
+    console.log(`[scheduler] nouvelle annonce du top ${cheapest.length} (${source}): "${item.title}" à ${item.price}€ (${reason})`);
+    try {
+      const messageId = await sendNewListingAlert(item, entry);
+      added.push({ itemKey, messageId });
     } catch (err) {
       console.error(`[scheduler] échec envoi Discord pour ${itemKey}:`, err);
     }
   }
 
-  setLastAlertedTop3(entryKey, currentIds);
+  // Un envoi/suppression en échec (catch ci-dessus) est simplement omis ici : il sera
+  // retenté au prochain cycle tant que l'item reste dans le top N (toAdd) ou en est sorti
+  // (toDelete, car absent de toKeep+added donc plus suivi -> considéré déjà "supprimé").
+  setLastAlertedItems(entryKey, [...toKeep, ...added]);
 }
 
 // Normalise vintedQuery (string | string[] | null) en tableau non vide, avec repli sur

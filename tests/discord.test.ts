@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { sendNewListingAlert, type AlertContext } from "../src/discord.js";
+import { sendNewListingAlert, deleteListingAlert, type AlertContext } from "../src/discord.js";
 import type { MarketplaceItem } from "../src/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -18,6 +18,7 @@ const testEntry: AlertContext = { name: "Dracaufeu ex 199 (base)", set: "ME05 - 
 
 interface CapturedCall {
   url: string;
+  method: string | undefined;
   body: any;
 }
 
@@ -29,7 +30,7 @@ async function withMockedFetch<T>(
   const calls: CapturedCall[] = [];
   const original = globalThis.fetch;
   globalThis.fetch = (async (url: string, init?: RequestInit) => {
-    calls.push({ url, body: init?.body ? JSON.parse(init.body as string) : undefined });
+    calls.push({ url, method: init?.method, body: init?.body ? JSON.parse(init.body as string) : undefined });
     return handler(url, init);
   }) as typeof fetch;
 
@@ -45,7 +46,7 @@ async function withMockedFetch<T>(
 // comportement précis (celui-ci est vérifié séparément plus bas).
 test("sendNewListingAlert - construit un embed conforme pour chaque fixture", async () => {
   await withMockedFetch(
-    () => new Response(null, { status: 204 }),
+    () => Response.json({ id: "9999999999999999999" }),
     async (calls) => {
       for (const item of fixtures) {
         await sendNewListingAlert(item, testEntry, 1);
@@ -84,12 +85,25 @@ test("sendNewListingAlert - construit un embed conforme pour chaque fixture", as
 
 test("sendNewListingAlert - retire le '(FR)' redondant en fin de titre", async () => {
   await withMockedFetch(
-    () => new Response(null, { status: 204 }),
+    () => Response.json({ id: "9999999999999999999" }),
     async (calls) => {
       const item = { ...fixtures[0], title: "Dracaufeu ex 199 Nuit Noire (FR)" };
       await sendNewListingAlert(item, testEntry, 1);
 
       assert.equal(calls[0].body.embeds[0].title, "Dracaufeu ex 199 Nuit Noire");
+    }
+  );
+});
+
+test("sendNewListingAlert - renvoie l'id du message créé (wait=true) et le demande bien dans l'URL", async () => {
+  await withMockedFetch(
+    () => Response.json({ id: "1234567890123456789" }),
+    async (calls) => {
+      const messageId = await sendNewListingAlert(fixtures[0], testEntry, 1);
+
+      assert.equal(messageId, "1234567890123456789");
+      const requestUrl = new URL(calls[0].url);
+      assert.equal(requestUrl.searchParams.get("wait"), "true");
     }
   );
 });
@@ -107,7 +121,7 @@ test("sendNewListingAlert - couleur et emoji selon la rareté détectée dans le
 
   for (const { entryName, expectedEmoji, expectedColor } of cases) {
     await withMockedFetch(
-      () => new Response(null, { status: 204 }),
+      () => Response.json({ id: "9999999999999999999" }),
       async (calls) => {
         const entry: AlertContext = { name: entryName, set: "ME05 - Nuit Noire" };
         await sendNewListingAlert(fixtures[0], entry, 1);
@@ -142,7 +156,7 @@ test("sendNewListingAlert - espace les envois consécutifs d'au moins minInterva
   await new Promise((resolve) => setTimeout(resolve, minIntervalMs + 50));
 
   await withMockedFetch(
-    () => new Response(null, { status: 204 }),
+    () => Response.json({ id: "9999999999999999999" }),
     async () => {
       const start = performance.now();
       await sendNewListingAlert(fixtures[0], testEntry, minIntervalMs);
@@ -177,7 +191,7 @@ test("sendNewListingAlert - sur 429, attend exactement retry_after (indiqué par
   await withMockedFetch(
     () => {
       callCount++;
-      return callCount === 1 ? rateLimitedResponse(retryAfterSeconds) : new Response(null, { status: 204 });
+      return callCount === 1 ? rateLimitedResponse(retryAfterSeconds) : Response.json({ id: "9999999999999999999" });
     },
     async (calls) => {
       const start = performance.now();
@@ -231,6 +245,40 @@ test("sendNewListingAlert - abandonne immédiatement (sans retry) si le 429 n'a 
       assert.equal(calls.length, 1, "aucun retry sans retry_after exploitable");
       assert.equal(errorSpy.mock.callCount(), 1);
       assert.match(String(errorSpy.mock.calls[0].arguments[0]), /sans retry_after exploitable/i);
+    }
+  );
+});
+
+test("deleteListingAlert - envoie une requête DELETE sur l'URL du message", async () => {
+  await withMockedFetch(
+    () => new Response(null, { status: 204 }),
+    async (calls) => {
+      await deleteListingAlert("1234567890123456789", 1);
+
+      assert.equal(calls.length, 1);
+      assert.equal(calls[0].method, "DELETE");
+      assert.match(calls[0].url, /\/messages\/1234567890123456789$/);
+    }
+  );
+});
+
+test("deleteListingAlert - un 404 (message déjà supprimé) n'est pas traité comme une erreur", async () => {
+  await withMockedFetch(
+    () => new Response("Unknown Message", { status: 404 }),
+    async () => {
+      await assert.doesNotReject(() => deleteListingAlert("1234567890123456789", 1));
+    }
+  );
+});
+
+test("deleteListingAlert - une autre erreur HTTP est bien propagée", async () => {
+  await withMockedFetch(
+    () => new Response("forbidden", { status: 403 }),
+    async () => {
+      await assert.rejects(
+        () => deleteListingAlert("1234567890123456789", 1),
+        /Suppression webhook Discord échouée: 403/
+      );
     }
   );
 });

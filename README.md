@@ -15,10 +15,10 @@ source activée :
    chevauchement de mots-clés — une "carte promo ETB" n'est pas un ETB).
 3. Recalcule intégralement le **top 3 des moins chères** parmi tous les résultats filtrés du
    cycle (par source — 3 eBay + 3 Vinted, classements indépendants).
-4. Si la **composition** de ce top 3 a changé depuis le dernier envoi pour cette entrée+source
-   (une annonce différente y est entrée ou en est sortie — l'ordre entre les 3 ou leur rang de
-   prix exact n'est pas pris en compte), poste les 3 alertes Discord **en entier** (pas
-   seulement la différence). Sinon, rien n'est envoyé ce cycle-là.
+4. Compare ce top 3 au dernier état alerté pour cette entrée+source et n'agit que sur ce qui a
+   changé : poste une alerte Discord pour chaque annonce qui **entre** dans le top 3, supprime
+   le message Discord de chaque annonce qui en **sort**, et laisse inchangé le message de
+   chaque annonce qui y **reste** (voir "Top 3 le moins cher + anti-spam" plus bas).
 
 Chaque source (eBay, Vinted) est interrogée indépendamment par entrée de la watchlist : un
 incident sur l'une (clé eBay pas encore approuvée, Vinted qui bloque une requête, etc.) est
@@ -140,8 +140,8 @@ src/
   types.ts      # MarketplaceItem : forme commune des annonces (eBay, Vinted, ...)
   ebay.ts       # client eBay Browse API (OAuth2 client credentials)
   vinted.ts     # client Vinted (endpoint interne catalog/items, retry sur 403/429)
-  db.ts         # SQLite (node:sqlite) : last_alerted_top3 (dernier top 3 envoyé par entrée+source)
-  discord.ts    # envoi webhook (embed stylé : couleur/emoji par rareté, lien cliquable, footer)
+  db.ts         # SQLite (node:sqlite) : last_alerted_items (top 3 actuel par entrée+source, avec messageId Discord)
+  discord.ts    # envoi/suppression webhook (embed stylé : couleur/emoji par rareté, lien cliquable, footer)
   matcher.ts    # filtre langue FR (regex titre + exclusions), 2 modes selon la source
   http.ts       # fetch avec retry (backoff linéaire, prédicat de statut retryable configurable)
   scheduler.ts  # orchestration : cron + logique du cycle de vérification (multi-source)
@@ -152,7 +152,7 @@ tests/
   discord.test.ts          # sendNewListingAlert() avec fetch mocké : embed, rareté, retry 429, throttle
   ebay.test.ts              # OAuth + Browse API mockés, contre tests/fixtures/ebay-*.json
   vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
-  scheduler.test.ts          # selectCheapestN, hasTop3Changed (fonctions pures)
+  scheduler.test.ts          # selectCheapestN, diffAlertedItems, vintedQueries, dedupeByItemId (fonctions pures)
   fixtures/*.json            # jeux de données des tests
 ```
 
@@ -195,25 +195,33 @@ Pour chaque entrée de la watchlist et chaque source, `alertCheapestForSource` :
 
 1. Recalcule le top `TOP_N_PER_ENTRY` (3) le moins cher sur **tous** les résultats FR du
    cycle (`selectCheapestN`), pas seulement les nouveaux.
-2. Compare la **composition** de ce top 3 (l'ensemble des ids, indépendamment de l'ordre) au
-   dernier top 3 réellement envoyé pour cette entrée+source, stocké dans
-   `last_alerted_top3` (`hasTop3Changed`).
-3. Si elle a changé (une annonce différente y est entrée ou en est sortie), poste les 3
-   alertes **en entier**. Si c'est exactement le même trio qu'au dernier envoi — même
-   réordonné entre eux par le prix — rien n'est renvoyé.
+2. Compare ce top 3 (l'ensemble des ids, indépendamment de l'ordre) au dernier état réellement
+   alerté pour cette entrée+source, stocké dans `last_alerted_items` (`diffAlertedItems`), et
+   n'agit QUE sur ce qui a changé, item par item :
+   - un item qui **entre** dans le top 3 est envoyé sur Discord ;
+   - un item qui en **sort** (vendu, plus assez cher pour rester dans le top 3...) voit son
+     message Discord **supprimé** (`deleteListingAlert`) ;
+   - un item qui **reste** dans le top 3 d'un cycle à l'autre n'est ni renvoyé ni supprimé —
+     son message existant reste tel quel.
+3. Si rien n'est entré ni sorti (même trio qu'au dernier envoi, même réordonné entre eux par
+   le prix), rien ne se passe ce cycle-là.
 
-`last_alerted_top3` ne sert donc plus à "avoir déjà vu cet item" (ancien modèle `seen_items`,
-abandonné) mais uniquement à détecter un changement de composition du top 3 d'un cycle à
-l'autre. Les entrées "produit scellé" (Display, ETB, Bundle, Tripack, Booster — reconnues
-par leur `name` dans `watchlist.json`, voir `isSealedProductEntry`) filtrent en plus les
-annonces ouvertes/incomplètes/reconditionnées/d'occasion (`isSealed`) et exigent le bon type
-de produit dans le titre côté `vinted.ts` (`isRelevantToQuery`), pas juste un chevauchement
-de mots-clés.
+Pour retrouver l'id du message Discord d'un item plus tard (nécessaire pour le supprimer),
+`sendNewListingAlert` poste au webhook avec `?wait=true` et retourne l'id renvoyé par Discord ;
+`last_alerted_items` stocke donc, par entrée+source, la liste `{itemKey, messageId}` du top 3
+actuellement affiché sur Discord (et non plus seulement les ids comme l'ancien
+`last_alerted_top3`). Les entrées "produit scellé" (Display, ETB, Bundle, Tripack, Booster —
+reconnues par leur `name` dans `watchlist.json`, voir `isSealedProductEntry`) filtrent en plus
+les annonces ouvertes/incomplètes/reconditionnées/d'occasion/vides (`isSealed`) et exigent le
+bon type de produit dans le titre côté `vinted.ts` (`isRelevantToQuery`), pas juste un
+chevauchement de mots-clés.
 
 ## Embed Discord (discord.ts)
 
 `sendNewListingAlert(item, entry)` construit un embed stylé à partir du `name` de l'entrée
-watchlist :
+watchlist, poste au webhook avec `?wait=true` et retourne l'**id du message créé** (nécessaire
+pour pouvoir le supprimer plus tard via `deleteListingAlert(messageId)`, voir la section top 3
+plus bas) :
 
 - **Couleur** et **emoji** en préfixe du titre selon la rareté détectable dans `name`
   (recherchée dans cet ordre) :
@@ -245,5 +253,9 @@ watchlist :
   dans le top 3 stocké.
 - Le top 3 n'est comparé que par composition (quels items en font partie), pas par prix ou
   rang exact : si une annonce du top 3 change de prix sans en sortir, aucune alerte n'est
-  renvoyée (comportement voulu, voir section ci-dessus).
+  renvoyée ni son message supprimé (comportement voulu, voir section ci-dessus).
+- La suppression d'un message Discord obsolète (`deleteListingAlert`) est du best-effort : si
+  elle échoue (Discord indisponible...), l'item n'est simplement plus suivi dans
+  `last_alerted_items` — son message reste visible sur Discord sans qu'un nouveau retry de
+  suppression soit tenté.
 - Leboncoin (anti-bot Datadome) n'est pas implémenté — prévu pour une V3 si nécessaire.

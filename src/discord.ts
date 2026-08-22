@@ -84,8 +84,13 @@ function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
   };
 }
 
+// wait=true : sans ce paramètre, Discord répond 204 (aucun corps) et on n'a aucun moyen de
+// récupérer l'id du message créé -> impossible de le supprimer plus tard si l'annonce sort
+// du top 3 (voir deleteListingAlert / scheduler.ts).
 function postEmbed(embed: ReturnType<typeof buildEmbed>): Promise<Response> {
-  return fetchWithRetry(config.discordWebhookUrl, {
+  const url = new URL(config.discordWebhookUrl);
+  url.searchParams.set("wait", "true");
+  return fetchWithRetry(url.toString(), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ embeds: [embed] }),
@@ -107,11 +112,13 @@ async function extractRetryAfterMs(res: Response): Promise<number | null> {
   return null;
 }
 
+// Renvoie l'id du message Discord créé (voir wait=true dans postEmbed), pour permettre de le
+// supprimer plus tard si l'annonce sort du top 3 (voir deleteListingAlert).
 export async function sendNewListingAlert(
   item: MarketplaceItem,
   entry: AlertContext,
   minIntervalMs = DEFAULT_MIN_INTERVAL_MS
-): Promise<void> {
+): Promise<string> {
   await waitForRateLimit(minIntervalMs);
 
   const embed = buildEmbed(item, entry);
@@ -139,5 +146,23 @@ export async function sendNewListingAlert(
       console.error(`[discord] toujours rate limited (429) après le retry, abandon pour l'item ${item.itemId}`);
     }
     throw new Error(`Envoi webhook Discord échoué: ${res.status} ${await res.text()}`);
+  }
+
+  const body = (await res.json()) as { id: string };
+  return body.id;
+}
+
+// Supprime un message précédemment envoyé par CE webhook (une annonce sortie du top 3 des
+// moins chères, remplacée par une plus intéressante). 404 = déjà supprimé (message effacé à la
+// main, ou salon/webhook recréé entre-temps) -> pas une erreur, on l'ignore silencieusement :
+// le but (le message n'est plus visible) est de toute façon déjà atteint.
+export async function deleteListingAlert(messageId: string, minIntervalMs = DEFAULT_MIN_INTERVAL_MS): Promise<void> {
+  await waitForRateLimit(minIntervalMs);
+
+  const url = new URL(`${config.discordWebhookUrl}/messages/${messageId}`);
+  const res = await fetchWithRetry(url.toString(), { method: "DELETE" });
+
+  if (!res.ok && res.status !== 404) {
+    throw new Error(`Suppression webhook Discord échouée: ${res.status} ${await res.text()}`);
   }
 }
