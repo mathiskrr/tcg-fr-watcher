@@ -74,18 +74,29 @@ async function debugScreenshot(page: LoginPage, step: string): Promise<void> {
 }
 // --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
-// Cas réel diagnostiqué : une popup de consentement cookies (RGPD, overlay gris + popup
-// blanche) bloquait l'accès au formulaire de login -- d'où le timeout persistant sur
-// EMAIL_SELECTOR malgré une LOGIN_URL correcte. Sélecteurs essayés dans l'ordre en un seul
-// waitForSelector (Playwright : une liste séparée par des virgules matche le premier trouvé),
-// best-effort comme les sélecteurs du formulaire : bandeaux tiers (OneTrust très répandu),
-// aucune garantie de stabilité.
+// Cas réel diagnostiqué : une popup de consentement cookies (RGPD, bandeau en bas avec
+// "Accepter tout" / "Cookies requis uniquement" / "Gérer les cookies") bloquait l'accès au
+// formulaire de login -- d'où le timeout persistant sur EMAIL_SELECTOR malgré une LOGIN_URL
+// correcte. Sélecteurs essayés dans l'ordre en un seul waitForSelector (Playwright : une liste
+// séparée par des virgules matche le premier trouvé) :
+//   - les sélecteurs CSS par id/classe (OneTrust, motif générique "accept") passent en premier
+//     -- rapides, mais fragiles si Vinted change son ID/sa classe.
+//   - le moteur "text=" de Playwright (recherche par libellé exact, "i" = insensible à la
+//     casse) cible directement "Accepter tout" tel qu'observé sur le bandeau Vinted, sans
+//     dépendre de la structure DOM -- plus robuste qu'un sélecteur CSS. Piège à éviter : ne
+//     JAMAIS matcher "Cookies requis uniquement" ou "Gérer les cookies" (n'accepteraient pas
+//     réellement les cookies), d'où des libellés EXACTS plutôt qu'un simple mot-clé "cookie".
+//   - `:has-text()` en filet de sécurité (sous-chaîne, pas exact) si le libellé varie
+//     légèrement (espace, ponctuation, majuscule isolée...).
 const COOKIE_CONSENT_SELECTOR = [
   "button#onetrust-accept-btn-handler",
   'button[id*="accept" i]',
-  'button[class*="cookie" i]:has-text("Tout accepter")',
-  'button[class*="cookie" i]:has-text("Accepter")',
+  `text="Accepter tout"i`,
+  `text="Tout accepter"i`,
+  `text="J'accepte"i`,
+  'button:has-text("Accepter tout")',
   'button:has-text("Tout accepter")',
+  `button:has-text("J'accepte")`,
   'button:has-text("Accepter")',
 ].join(", ");
 
