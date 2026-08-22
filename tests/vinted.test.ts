@@ -192,6 +192,18 @@ test("isRelevantToQuery - cas réel diagnostiqué : le type de produit exact est
   assert.equal(isRelevantToQuery("Coffret Dresseur d'Elite Nuit Noire ME05 scellé", etbQuery), true);
 });
 
+test("isRelevantToQuery - cas réel diagnostiqué : une carte promo isolée (titre ne commençant pas par 'Carte') se glissait dans le top ETB", () => {
+  // "🔥 Zarude MEP 088 – Promo ETB Nuit Noire – Scellée FR" (5€) a été alerté à tort comme
+  // ETB (~65-80€ normalement) : le titre commence par le nom de la carte, pas par "Carte",
+  // donc SINGLE_CARD_PREFIX_PATTERN ne le voit pas venir -> "promo" seul doit suffire à écarter.
+  assert.equal(
+    isRelevantToQuery("🔥 Zarude MEP 088 – Promo ETB Nuit Noire – Scellée FR", "ETB Nuit Noire ME05"),
+    false
+  );
+  // Un vrai ETB reste accepté même sans le mot "promo".
+  assert.equal(isRelevantToQuery("ETB Nuit Noire ME05 neuf scellé", "ETB Nuit Noire ME05"), true);
+});
+
 test("isRelevantToQuery - le marqueur de type de produit ignore l'ordre demi-display/display", () => {
   // "display" seul matcherait aussi "demi-display" (le mot y figure) -> demi-display est
   // vérifié en priorité pour éviter qu'une recherche "display" (36 boosters) n'accepte une

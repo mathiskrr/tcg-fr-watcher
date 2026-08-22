@@ -125,6 +125,14 @@ function findProductTypeMarker(query: string): ProductTypeMarker | null {
 // scellé commence par le nom du produit (Display/ETB/Coffret/Bundle/Tripack/Booster...).
 const SINGLE_CARD_PREFIX_PATTERN = /^\s*cartes?\b/i;
 
+// Cas réel remonté en prod : "🔥 Zarude MEP 088 – Promo ETB Nuit Noire – Scellée FR" (5€) --
+// une carte promo isolée dont le titre commence par le nom de la carte (pas par "Carte"), donc
+// non détectée par SINGLE_CARD_PREFIX_PATTERN, mais qui mentionne bien "ETB"/"Nuit Noire" en
+// passant et se glissait dans le top 3 "moins cher" à la place d'un vrai ETB (~65-80€). "promo"
+// est un signal fort à lui seul : le contenu d'un vrai coffret scellé (boosters, accessoires)
+// n'a aucune raison d'être qualifié de "carte promo" dans son propre titre.
+const PROMO_SINGLE_CARD_PATTERN = /\bpromos?\b/i;
+
 // Un titre est jugé pertinent s'il contient au moins la moitié (arrondi au-dessus) des mots
 // significatifs de la requête. Évite de rejeter sur un seul mot manquant (accord, abréviation
 // différente) tout en filtrant le contenu générique renvoyé par le fallback de Vinted.
@@ -156,7 +164,11 @@ export function isRelevantToQuery(title: string, query: string): boolean {
 
   const productType = findProductTypeMarker(query);
   if (productType !== null) {
-    if (SINGLE_CARD_PREFIX_PATTERN.test(title) || !productType.titlePattern.test(normalizeForMatch(title))) {
+    if (
+      SINGLE_CARD_PREFIX_PATTERN.test(title) ||
+      PROMO_SINGLE_CARD_PATTERN.test(title) ||
+      !productType.titlePattern.test(normalizeForMatch(title))
+    ) {
       return false;
     }
   }
