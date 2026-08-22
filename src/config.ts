@@ -61,6 +61,13 @@ export const config = {
   // le serveur ne démarre pas du tout si absent, pour ne jamais exposer un endpoint ouvert
   // par accident (voir server.ts / index.ts).
   adminSecret: process.env.ADMIN_SECRET || null,
+  // Identifiants Vinted pour le renouvellement automatique du token par login programmatique
+  // (voir vintedAuth.ts). Optionnels : absents/vides => renouvellement auto désactivé,
+  // fallback silencieux sur le renouvellement manuel (POST /token, voir server.ts). Les deux
+  // doivent être présents pour être considérés valides (email seul ou mot de passe seul
+  // n'a pas de sens).
+  vintedEmail: process.env.VINTED_EMAIL || null,
+  vintedPassword: process.env.VINTED_PASSWORD || null,
 };
 
 export type Config = typeof config;

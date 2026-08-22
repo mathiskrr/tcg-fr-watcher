@@ -133,6 +133,8 @@ relais selon `CRON_SCHEDULE` (par défaut `*/10 * * * *`, toutes les 10 minutes)
 | `VINTED_ACCESS_TOKEN_WEB` | non       | —                           | Cookie de session Vinted (JWT), voir section "Vinted" |
 | `ADMIN_PORT`            | non         | `3939`                      | Port du serveur d'admin (renouvellement à distance du token), voir section dédiée |
 | `ADMIN_SECRET`          | non         | —                           | Secret partagé du serveur d'admin ; **serveur désactivé si absent** |
+| `VINTED_EMAIL`          | non         | —                           | Identifiant Vinted pour le renouvellement automatique du token ; **désactivé si absent** (voir section dédiée) |
+| `VINTED_PASSWORD`       | non         | —                           | Mot de passe Vinted correspondant ; les deux doivent être présents pour activer le renouvellement auto |
 
 ## Architecture
 
@@ -148,6 +150,8 @@ src/
   http.ts       # fetch avec retry (backoff linéaire, prédicat de statut retryable configurable)
   tokenStore.ts # token Vinted en mémoire, modifiable à chaud (voir server.ts) sans redémarrage
   server.ts     # serveur HTTP admin (POST /token, GET /status) pour renouveler le token à distance
+  vintedLoginFlow.ts # logique de login Vinted (Playwright), testable sans navigateur réel (interface LoginPage)
+  vintedAuth.ts # pilote un vrai navigateur Chromium headless + programme le renouvellement auto (setInterval)
   scheduler.ts  # orchestration : cron + logique du cycle de vérification (multi-source)
   index.ts      # entrypoint
 tests/
@@ -158,6 +162,8 @@ tests/
   vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
   scheduler.test.ts          # selectCheapestN, diffAlertedItems, vintedQueries, dedupeByItemId (fonctions pures)
   server.test.ts             # POST /token, GET /status : auth (accepté/refusé), jamais le secret/token dans les logs
+  vintedLoginFlow.test.ts    # performVintedLogin avec un mock LoginPage fait main (aucun navigateur réel)
+  vintedAuth.test.ts         # applyLoginOutcome (mise à jour tokenStore + logs), gating sans identifiants
   fixtures/*.json            # jeux de données des tests
 ```
 
@@ -345,14 +351,119 @@ exposer tel quel sur Internet sans réflexion :
    - Sans l'un ou l'autre, le secret circule en clair : acceptable pour un test rapide, pas
      pour un usage durable exposé sur Internet.
 
+## Renouvellement automatique du token (vintedAuth.ts)
+
+En complément du renouvellement manuel (`.env` ou serveur d'admin ci-dessus), `vintedAuth.ts`
+peut renouveler le token Vinted **tout seul**, toutes les 90 minutes, en se connectant à Vinted
+avec de vrais identifiants via un navigateur Chromium headless (Playwright). Les deux systèmes
+cohabitent sans conflit : ils écrivent dans le même `tokenStore.ts` en mémoire, peu importe
+lequel a fourni la dernière valeur.
+
+**Désactivé par défaut** : n'active ce mécanisme QUE si `VINTED_EMAIL` **et**
+`VINTED_PASSWORD` sont tous les deux définis dans `.env`. Absents (par défaut) : le bot logge
+`renouvellement automatique désactivé` au démarrage et continue de fonctionner exactement
+comme avant, avec le seul système manuel.
+
+### ⚠️ Risques à connaître avant d'activer
+
+- **Identifiants en clair sur le serveur.** `VINTED_EMAIL`/`VINTED_PASSWORD` sont tes vrais
+  identifiants de connexion, stockés en clair dans `.env`. Ce fichier est déjà exclu de git
+  (`.gitignore`), mais sur le serveur, restreins-en aussi les permissions :
+  ```bash
+  chmod 600 .env
+  ```
+- **Détection anti-bot / risque sur le compte.** Vinted n'expose aucune API officielle et peut
+  considérer une connexion automatisée récurrente (24/7, toutes les 90 min) comme un
+  comportement de bot — avec un risque réel de restriction ou de bannissement du compte. C'est
+  un compromis assumé par ce mécanisme, pas une garantie d'innocuité. Si ce risque n'est pas
+  acceptable, ne définis simplement pas ces deux variables : le renouvellement manuel (`.env`
+  ou `POST /token`) reste pleinement fonctionnel sans jamais toucher à ce module.
+- **Aucun contournement de captcha/2FA.** Si Vinted présente un captcha ou une vérification
+  supplémentaire, le module ne tente RIEN pour la résoudre : il logge
+  `connexion auto bloquée par Vinted (captcha/2FA détecté)` et laisse le token actuel expirer
+  normalement, fallback sur le renouvellement manuel. Il ne boucle jamais dessus.
+- **Pas de retry agressif.** Des identifiants refusés (`invalid_credentials`) ou une connexion
+  qui n'aboutit pas (`timeout`) n'entraînent PAS de nouvelle tentative immédiate — seulement au
+  prochain cycle programmé (90 min plus tard). Insister en boucle sur des identifiants refusés
+  est le genre de motif qui fait flaguer un compte.
+- **Sélecteurs du formulaire non garantis.** Vinted ne documente pas son DOM et peut changer
+  son formulaire de connexion sans préavis (voir `vintedLoginFlow.ts`) — si ça arrive, le
+  module échoue proprement en `timeout` (le sélecteur de l'email/mot de passe n'est jamais
+  trouvé) plutôt que de planter, et retombe sur le fallback manuel.
+
+### Fonctionnement
+
+- `vintedLoginFlow.ts` contient la logique pure (navigation, remplissage du formulaire,
+  classification de l'issue : succès / captcha-2FA / identifiants refusés / timeout / erreur
+  inconnue) derrière une interface `LoginPage` minimaliste — testable sans jamais lancer de
+  vrai navigateur (`tests/vintedLoginFlow.test.ts`).
+- `vintedAuth.ts` pilote un vrai navigateur (`chromium.launch({ headless: true })`), l'referme
+  systématiquement (même en erreur), et applique l'issue (`applyLoginOutcome`, testable
+  séparément) : succès → met à jour `tokenStore.ts` + logge l'expiration décodée (jamais le
+  token) ; tout le reste → logge clairement sans toucher au token existant.
+- Aucun mot de passe n'est jamais loggé, y compris dans les branches d'erreur.
+- Programmé via `setInterval` (pas une expression cron) : 90 minutes ne correspond à aucun
+  motif calendaire simple, contrairement au cycle de vérification des annonces (`*/10 * * * *`).
+  Pas d'exécution immédiate au démarrage du process (un token valide est probablement déjà
+  configuré) — seulement à partir du premier intervalle écoulé.
+
+### Installer Playwright + Chromium sur le serveur (Rocky Linux)
+
+`playwright-chromium` (déjà dans `package.json`) télécharge le binaire Chromium séparément à
+l'installation ; ses dépendances système ne sont PAS incluses par défaut sur une image Rocky
+Linux minimale :
+
+```bash
+npm install
+npx playwright install --with-deps chromium
+```
+
+`--with-deps` installe automatiquement les paquets système manquants (bibliothèques graphiques,
+polices...) via `dnf`/`yum` — sans lui, Chromium refuse de démarrer avec des erreurs de
+bibliothèques partagées manquantes. Nécessite les droits root/sudo pour cette partie précise.
+
+### RAM : l'instance 1 Go tiendra-t-elle la charge ?
+
+**Prévois plutôt 2 Go, ou ajoute du swap.** Chromium headless consomme typiquement
+**300-500 Mo** au démarrage d'une page (plus avec des extensions de rendu), pour la durée du
+login (quelques secondes toutes les 90 min) — mais ce pic s'ajoute à ce qui tourne déjà en
+continu sur l'instance : le process Node du bot lui-même, PM2, et SQLite en mode WAL (qui garde
+des pages en cache). Sur une instance à 1 Go, un pic de 300-500 Mo supplémentaire toutes les
+90 min laisse très peu de marge — un seul autre processus qui grossit temporairement (un `npm
+install`, une mise à jour système) peut suffire à déclencher l'OOM killer du noyau, qui ciblera
+le plus souvent le process le plus gourmand du moment (potentiellement le bot lui-même, pas
+seulement Chromium) et **coupera la surveillance des annonces**, pas seulement le
+renouvellement du token.
+
+Deux options, par ordre de préférence :
+1. **Upgrader vers 2 Go de RAM** si l'offre Oracle Cloud le permet sans coût — c'est la
+   solution la plus sûre à long terme pour un service qui doit rester up 24/7.
+2. **Ajouter un fichier swap** (palliatif, pas une vraie solution mais suffisant si upgrader
+   n'est pas possible immédiatement) :
+   ```bash
+   sudo fallocate -l 2G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+   ```
+   Le swap évite l'OOM kill brutal mais ralentit fortement le process qui l'utilise (I/O disque
+   au lieu de RAM) — acceptable pour un login Playwright occasionnel (quelques secondes de plus
+   ne changent rien), pas pour le cycle de vérification des annonces qui doit rester réactif.
+
+Si le budget/l'offre ne permet ni l'un ni l'autre : le renouvellement manuel (serveur d'admin,
+sans Chromium, empreinte mémoire négligeable) reste l'option la plus sûre pour une instance à
+1 Go — le gain de confort du renouvellement automatique ne vaut probablement pas le risque de
+voir le bot lui-même killé par OOM.
+
 ## Limitations connues (V2)
 
-- Le cookie `access_token_web` de Vinted est configuré manuellement et expire au bout de
-  quelques heures : sans renouvellement régulier, les requêtes Vinted finissent par échouer
-  en 401 (détecté et loggé clairement, voir section "Vinted" ci-dessus). Le serveur d'admin
-  (voir section dédiée) permet de le renouveler à distance sans SSH, mais reste manuel — pas
-  de renouvellement automatique (cela nécessiterait de gérer un `refresh_token_web` et un flux
-  de refresh, hors scope volontairement pour rester simple).
+- Le cookie `access_token_web` de Vinted expire au bout de quelques heures : sans
+  renouvellement régulier, les requêtes Vinted finissent par échouer en 401 (détecté et loggé
+  clairement, voir section "Vinted" ci-dessus). Deux renouvellements coexistent : manuel
+  (serveur d'admin, sans risque particulier) et automatique par login programmatique
+  (`vintedAuth.ts`, désactivé par défaut — voir sa section dédiée pour les risques réels avant
+  de l'activer : détection anti-bot possible, identifiants en clair sur le serveur).
 - Les `itemId` sont propres à chaque marketplace et ne sont donc pas garantis uniques entre eBay
   et Vinted : `scheduler.ts` préfixe la clé (`ebay:...` / `vinted:...`) pour éviter toute collision
   dans le top 3 stocké.
