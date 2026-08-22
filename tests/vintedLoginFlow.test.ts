@@ -1,6 +1,20 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { performVintedLogin, type LoginPage, type LoginPageCookie } from "../src/vintedLoginFlow.js";
+import {
+  performVintedLogin,
+  type LoginPage,
+  type LoginPageCookie,
+  type LoginPageResponse,
+} from "../src/vintedLoginFlow.js";
+
+function makeMockResponse(status: number, userAgent: string | undefined): LoginPageResponse {
+  return {
+    status: () => status,
+    request: () => ({
+      headers: () => (userAgent === undefined ? {} : { "user-agent": userAgent }),
+    }),
+  };
+}
 
 // Timeouts réduits pour que les scénarios "timeout"/sondage restent rapides en test (voir
 // commentaire dans vintedLoginFlow.ts sur pourquoi ces valeurs sont exposées en paramètres).
@@ -16,6 +30,7 @@ interface MockPageOptions {
   failWaitForSelector?: boolean;
   screenshotCalls?: string[]; // rempli au fil des appels à screenshot(), si fourni
   failScreenshot?: boolean;
+  gotoResponse?: LoginPageResponse | null; // par défaut: réponse 200 avec un User-Agent de test
 }
 
 // Implémente LoginPage à la main (aucune dépendance à playwright-chromium) : c'est tout
@@ -29,11 +44,13 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     failWaitForSelector = false,
     screenshotCalls,
     failScreenshot = false,
+    gotoResponse = makeMockResponse(200, "Mock/1.0 Test-Agent"),
   } = options;
 
   return {
     async goto(_url, _opts) {
       if (failGoto) throw new Error("Timeout 50ms exceeded while navigating");
+      return gotoResponse;
     },
     async fill(_selector, _value) {},
     async click(_selector) {},
@@ -289,4 +306,71 @@ test("performVintedLogin - [debug] logge précisément le sélecteur qui a écho
     ),
     "doit nommer précisément l'étape et le sélecteur qui ont échoué"
   );
+});
+
+test("performVintedLogin - [debug] logge le statut HTTP et le User-Agent de la réponse de navigation", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "token-ok" }],
+    gotoResponse: makeMockResponse(403, "HeadlessChrome/124.0.0.0"),
+  });
+
+  await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  const messages = logSpy.mock.calls.map((c) => String(c.arguments[0]));
+  assert.ok(messages.some((m) => /statut HTTP de navigation: 403/.test(m)));
+  assert.ok(messages.some((m) => /User-Agent envoyé: HeadlessChrome\/124\.0\.0\.0/.test(m)));
+});
+
+test("performVintedLogin - [debug] gère une réponse de navigation null sans planter", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "token-ok" }],
+    gotoResponse: null,
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "token-ok" });
+  assert.ok(logSpy.mock.calls.some((c) => /aucune réponse/.test(String(c.arguments[0]))));
+});
+
+test("performVintedLogin - [debug] logge le HTML de la page à l'arrivée, tronqué à 2000 caractères", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const longHtml = `<html>${"x".repeat(3000)}</html>`; // > 2000 caractères
+  const page = makeMockPage({ html: longHtml });
+
+  await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  const htmlLogMessage = logSpy.mock.calls
+    .map((c) => String(c.arguments[0]))
+    .find((m) => m.includes("HTML à l'arrivée"));
+
+  assert.ok(htmlLogMessage, "doit logger le HTML à l'arrivée sur la page");
+  assert.match(htmlLogMessage, /tronqué, 3013 caractères au total/);
+  assert.ok(!htmlLogMessage.includes("x".repeat(2001)), "ne doit jamais logger plus de 2000 caractères de HTML");
 });

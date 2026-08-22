@@ -15,8 +15,21 @@ export interface LoginPageContext {
   cookies(): Promise<LoginPageCookie[]>;
 }
 
+// request()/response() minimalistes : juste de quoi lire le statut HTTP et le User-Agent
+// réellement envoyé (voir debugLogArrival) -- pas une interface générale des requêtes réseau.
+export interface LoginPageRequest {
+  headers(): Record<string, string>;
+}
+
+export interface LoginPageResponse {
+  status(): number;
+  request(): LoginPageRequest;
+}
+
 export interface LoginPage {
-  goto(url: string, options?: { timeout?: number }): Promise<unknown>;
+  // Playwright peut renvoyer `null` (ex: navigation vers une simple ancre) -- géré comme
+  // "aucune réponse capturée" plutôt qu'une erreur (voir debugLogArrival).
+  goto(url: string, options?: { timeout?: number }): Promise<LoginPageResponse | null>;
   fill(selector: string, value: string): Promise<void>;
   click(selector: string): Promise<void>;
   waitForSelector(selector: string, options?: { timeout?: number }): Promise<unknown>;
@@ -53,10 +66,12 @@ const FORM_TIMEOUT_MS = 30_000;
 const POST_SUBMIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 500;
 
-const DEBUG_SCREENSHOTS_ENABLED = true;
+const DEBUG_LOGIN_ENABLED = true;
+
+const HTML_LOG_TRUNCATE_LENGTH = 2000;
 
 async function debugScreenshot(page: LoginPage, step: string): Promise<void> {
-  if (!DEBUG_SCREENSHOTS_ENABLED) return;
+  if (!DEBUG_LOGIN_ENABLED) return;
 
   const filePath = join(tmpdir(), `vinted-debug-${step}-${Date.now()}.png`);
   try {
@@ -66,6 +81,32 @@ async function debugScreenshot(page: LoginPage, step: string): Promise<void> {
     // Une capture qui échoue ne doit jamais faire échouer le login lui-même -- c'est un outil
     // de diagnostic, pas une étape fonctionnelle.
     console.error(`[vintedLoginFlow][debug] échec de la capture (étape "${step}"):`, err);
+  }
+}
+
+// Cas réel diagnostiqué : la 1ère capture (arrivée sur la page) était un écran blanc total --
+// ces logs permettent de distinguer une VRAIE réponse HTTP (bloquée ou non, avec un statut et
+// un HTML exploitables) d'un échec silencieux (page.goto qui n'a rien reçu, response === null).
+async function debugLogArrival(page: LoginPage, response: LoginPageResponse | null): Promise<void> {
+  if (!DEBUG_LOGIN_ENABLED) return;
+
+  if (response === null) {
+    console.log("[vintedLoginFlow][debug] page.goto() n'a renvoyé aucune réponse (response === null)");
+  } else {
+    const userAgent = response.request().headers()["user-agent"] ?? "(en-tête user-agent absent de la requête)";
+    console.log(`[vintedLoginFlow][debug] statut HTTP de navigation: ${response.status()}`);
+    console.log(`[vintedLoginFlow][debug] User-Agent envoyé: ${userAgent}`);
+  }
+
+  try {
+    const html = await page.content();
+    const truncated =
+      html.length > HTML_LOG_TRUNCATE_LENGTH
+        ? `${html.slice(0, HTML_LOG_TRUNCATE_LENGTH)}... (tronqué, ${html.length} caractères au total)`
+        : html;
+    console.log(`[vintedLoginFlow][debug] HTML à l'arrivée sur la page (${html.length} caractères):\n${truncated}`);
+  } catch (err) {
+    console.error("[vintedLoginFlow][debug] échec de la lecture du HTML à l'arrivée:", err);
   }
 }
 // --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
@@ -157,11 +198,13 @@ export async function performVintedLogin(
   postSubmitTimeoutMs = POST_SUBMIT_TIMEOUT_MS,
   pollIntervalMs = POLL_INTERVAL_MS
 ): Promise<LoginOutcome> {
+  let arrivalResponse: LoginPageResponse | null;
   try {
-    await page.goto(LOGIN_URL, { timeout: navTimeoutMs });
+    arrivalResponse = await page.goto(LOGIN_URL, { timeout: navTimeoutMs });
   } catch (err) {
     return classifyStepError("navigation vers la page de login (page.goto)", err);
   }
+  await debugLogArrival(page, arrivalResponse);
   await debugScreenshot(page, "01-arrivee-sur-la-page");
 
   try {
