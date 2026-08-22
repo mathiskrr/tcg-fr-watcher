@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { isFrenchTitle, isSealed } from "../src/matcher.js";
+import { isFrenchTitle, isSealed, isSealedProductEntry } from "../src/matcher.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -100,4 +100,18 @@ test("isSealed - rejette les produits reconditionnés ou d'occasion", () => {
 test("isSealed - accepte les produits scellés (aucune mention d'ouverture)", () => {
   assert.equal(isSealed("ETB Nuit Noire ME05 scellé neuf"), true);
   assert.equal(isSealed("Display Pokémon Nuit Noire ME05 – 36 boosters – Neuve scellée FR"), true);
+});
+
+test("isSealedProductEntry - identifie les entrées watchlist de produits scellés par leur nom", () => {
+  assert.equal(isSealedProductEntry("Display Nuit Noire (36 boosters)"), true);
+  assert.equal(isSealedProductEntry("Demi-display Nuit Noire (18 boosters)"), true); // "display" y figure
+  assert.equal(isSealedProductEntry("ETB Nuit Noire"), true);
+  assert.equal(isSealedProductEntry("Bundle 6 boosters Nuit Noire"), true);
+  assert.equal(isSealedProductEntry("Tripack Nuit Noire"), true);
+  assert.equal(isSealedProductEntry("Booster Nuit Noire (unité)"), true);
+});
+
+test("isSealedProductEntry - une entrée carte à l'unité n'est pas identifiée comme produit scellé", () => {
+  assert.equal(isSealedProductEntry("Méga-Darkrai-ex 116/084 (SIR)"), false);
+  assert.equal(isSealedProductEntry("Mimantis 085/084 (AR)"), false);
 });

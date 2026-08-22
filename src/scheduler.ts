@@ -3,7 +3,7 @@ import cron from "node-cron";
 import { config } from "./config.js";
 import { searchEbay } from "./ebay.js";
 import { searchVinted } from "./vinted.js";
-import { isFrenchTitle, isSealed, type LanguageFilterMode } from "./matcher.js";
+import { isFrenchTitle, isSealed, isSealedProductEntry, type LanguageFilterMode } from "./matcher.js";
 import { getLastAlertedTop3, setLastAlertedTop3 } from "./db.js";
 import { sendNewListingAlert } from "./discord.js";
 import type { MarketplaceItem } from "./types.js";
@@ -77,14 +77,6 @@ export function hasTop3Changed(currentIds: string[], lastIds: string[] | null): 
   return !currentIds.every((id) => lastSet.has(id));
 }
 
-// Entrées watchlist représentant un produit scellé (par opposition à une carte à l'unité) :
-// identifiables par leur nom. "display" matche aussi "demi-display" (le mot y est présent).
-const SEALED_PRODUCT_NAME_PATTERN = /\b(display|etb|bundle|tripack|booster)\b/i;
-
-export function isSealedProductEntry(entryName: string): boolean {
-  return SEALED_PRODUCT_NAME_PATTERN.test(entryName);
-}
-
 // Filtre langue (+ produit scellé le cas échéant) sur TOUS les résultats d'une source pour
 // un cycle : le top N se recalcule à chaque cycle sur l'ensemble des résultats, sans dédup
 // par item individuel (voir alertCheapestForSource pour la logique anti-spam au niveau du
@@ -117,27 +109,27 @@ function filterFrenchMatches(
 // composition a changé depuis le dernier envoi pour cette entrée+source (voir
 // hasTop3Changed). Si elle a changé, les N alertes sont renvoyées EN ENTIER (pas seulement
 // la différence), pour toujours voir les N vraies moins chères ensemble dans Discord.
-async function alertCheapestForSource(entryName: string, source: string, matches: Candidate[]): Promise<void> {
+async function alertCheapestForSource(entry: WatchlistEntry, source: string, matches: Candidate[]): Promise<void> {
   if (matches.length === 0) return;
 
   const cheapest = selectCheapestN(matches, TOP_N_PER_ENTRY);
-  const entryKey = `${source}:${entryName}`;
+  const entryKey = `${source}:${entry.name}`;
   const currentIds = cheapest.map((c) => c.itemKey);
   const lastIds = getLastAlertedTop3(entryKey);
 
   if (!hasTop3Changed(currentIds, lastIds)) {
-    console.log(`[scheduler] top ${cheapest.length} (${source}) inchangé pour ${entryName}, aucune alerte`);
+    console.log(`[scheduler] top ${cheapest.length} (${source}) inchangé pour ${entry.name}, aucune alerte`);
     return;
   }
 
   console.log(
-    `[scheduler] top ${cheapest.length} (${source}) modifié pour ${entryName} — envoi des ${cheapest.length} alertes`
+    `[scheduler] top ${cheapest.length} (${source}) modifié pour ${entry.name} — envoi des ${cheapest.length} alertes`
   );
 
   for (const { itemKey, item, reason } of cheapest) {
     console.log(`[scheduler] annonce du top ${cheapest.length} (${source}): "${item.title}" à ${item.price}€ (${reason})`);
     try {
-      await sendNewListingAlert(item);
+      await sendNewListingAlert(item, entry);
     } catch (err) {
       console.error(`[scheduler] échec envoi Discord pour ${itemKey}:`, err);
     }
@@ -162,8 +154,8 @@ async function checkEntry(entry: WatchlistEntry): Promise<void> {
   const vintedMatches = filterFrenchMatches("vinted", "assume-french", vintedItems, entry.name);
 
   // Classement et alertes indépendants par source (voir commentaire sur TOP_N_PER_ENTRY).
-  await alertCheapestForSource(entry.name, "ebay", ebayMatches);
-  await alertCheapestForSource(entry.name, "vinted", vintedMatches);
+  await alertCheapestForSource(entry, "ebay", ebayMatches);
+  await alertCheapestForSource(entry, "vinted", vintedMatches);
 }
 
 export async function runCheck(): Promise<void> {

@@ -2,7 +2,7 @@ import "./env.js"; // doit rester le premier import : peuple process.env avant q
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { selectCheapestN, hasTop3Changed, isSealedProductEntry, type Candidate } from "../src/scheduler.js";
+import { selectCheapestN, hasTop3Changed, type Candidate } from "../src/scheduler.js";
 import type { MarketplaceItem } from "../src/types.js";
 
 function makeCandidate(itemId: string, price: number, source = "vinted"): Candidate {
@@ -175,18 +175,4 @@ test("scénario 2 cycles : le top 3 se recalcule sur l'ensemble des résultats, 
 
   assert.deepEqual(top4.map((c) => c.item.itemId), ["f", "c", "b"]); // "c" et "b" permutés
   assert.equal(changed4, false, "mêmes 3 items, juste réordonnés par prix -> aucune alerte");
-});
-
-test("isSealedProductEntry - identifie les entrées watchlist de produits scellés par leur nom", () => {
-  assert.equal(isSealedProductEntry("Display Nuit Noire (36 boosters)"), true);
-  assert.equal(isSealedProductEntry("Demi-display Nuit Noire (18 boosters)"), true); // "display" y figure
-  assert.equal(isSealedProductEntry("ETB Nuit Noire"), true);
-  assert.equal(isSealedProductEntry("Bundle 6 boosters Nuit Noire"), true);
-  assert.equal(isSealedProductEntry("Tripack Nuit Noire"), true);
-  assert.equal(isSealedProductEntry("Booster Nuit Noire (unité)"), true);
-});
-
-test("isSealedProductEntry - une entrée carte à l'unité n'est pas identifiée comme produit scellé", () => {
-  assert.equal(isSealedProductEntry("Méga-Darkrai-ex 116/084 (SIR)"), false);
-  assert.equal(isSealedProductEntry("Mimantis 085/084 (AR)"), false);
 });

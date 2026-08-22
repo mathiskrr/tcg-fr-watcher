@@ -1,6 +1,15 @@
 import { config } from "./config.js";
 import { fetchWithRetry } from "./http.js";
+import { isSealedProductEntry } from "./matcher.js";
 import type { MarketplaceItem } from "./types.js";
+
+// Contexte minimal nécessaire à l'embed (nom + set de l'entrée watchlist), sans dépendre du
+// type WatchlistEntry de scheduler.ts (qui importe déjà sendNewListingAlert d'ici — éviter
+// un import circulaire).
+export interface AlertContext {
+  name: string;
+  set: string;
+}
 
 // Espace les envois vers le webhook Discord pour rester sous sa limite de taux (~5
 // requêtes / 2s par webhook) quand plusieurs annonces sont détectées dans le même
@@ -17,14 +26,61 @@ async function waitForRateLimit(minIntervalMs: number): Promise<void> {
   lastSentAt = Date.now();
 }
 
-function buildEmbed(item: MarketplaceItem) {
+// Couleur + emoji selon la rareté détectable dans le nom de l'entrée watchlist. Vérifiés
+// dans cet ordre : Gold/SIR (haut de gamme) avant AR/UR, avant le générique "scellé".
+const COLOR_GOLD = 0xf1c40f;
+const COLOR_PURPLE = 0x9b59b6;
+const COLOR_BLUE = 0x3498db;
+const COLOR_GREY = 0x95a5a6;
+
+const GOLD_PATTERN = /\bgold\b/i;
+const SIR_PATTERN = /\bsir\b/i;
+const AR_OR_UR_PATTERN = /\b(ar|ur)\b/i;
+
+interface RarityStyle {
+  color: number;
+  emojiPrefix: string;
+}
+
+function detectRarityStyle(entryName: string): RarityStyle {
+  if (GOLD_PATTERN.test(entryName) || SIR_PATTERN.test(entryName)) {
+    return { color: GOLD_PATTERN.test(entryName) ? COLOR_GOLD : COLOR_PURPLE, emojiPrefix: "🌟 " };
+  }
+  if (AR_OR_UR_PATTERN.test(entryName)) {
+    return { color: COLOR_BLUE, emojiPrefix: "✨ " };
+  }
+  if (isSealedProductEntry(entryName)) {
+    return { color: COLOR_GREY, emojiPrefix: "📦 " };
+  }
+  return { color: COLOR_GREY, emojiPrefix: "" };
+}
+
+// Toutes les annonces sont déjà filtrées FR en amont (matcher.ts) : le "(FR)" en fin de
+// titre, quand un vendeur le met, n'apporte plus rien une fois dans l'embed.
+const TRAILING_FR_TAG_PATTERN = /\s*\(fr\)\s*$/i;
+
+function cleanTitle(title: string): string {
+  return title.replace(TRAILING_FR_TAG_PATTERN, "").trim();
+}
+
+function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
+  const { color, emojiPrefix } = detectRarityStyle(entry.name);
+
   return {
-    title: item.title,
+    title: `${emojiPrefix}${cleanTitle(item.title)}`,
     url: item.url,
-    color: 0x2ecc71,
+    color,
     thumbnail: item.imageUrl ? { url: item.imageUrl } : undefined,
-    fields: [{ name: "Prix", value: `${item.price.toFixed(2)} €`, inline: true }],
-    footer: { text: `item ${item.itemId}` },
+    fields: [
+      { name: "💰 Prix", value: `**${item.price.toFixed(2)} €**`, inline: true },
+      // Footer Discord = texte brut (pas de lien cliquable) : le lien vit dans un field à
+      // la place, en markdown, pour rester réellement cliquable.
+      { name: "Annonce", value: `[🔗 Voir l'annonce](${item.url})`, inline: true },
+    ],
+    // `timestamp` (ISO8601) est un champ natif de l'embed Discord : combiné au footer, il
+    // affiche "<set> • à l'instant" (ou l'heure exacte) sans avoir à le formater nous-mêmes.
+    footer: { text: entry.set },
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -53,11 +109,12 @@ async function extractRetryAfterMs(res: Response): Promise<number | null> {
 
 export async function sendNewListingAlert(
   item: MarketplaceItem,
+  entry: AlertContext,
   minIntervalMs = DEFAULT_MIN_INTERVAL_MS
 ): Promise<void> {
   await waitForRateLimit(minIntervalMs);
 
-  const embed = buildEmbed(item);
+  const embed = buildEmbed(item, entry);
   let res = await postEmbed(embed);
   let retried = false;
 

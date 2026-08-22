@@ -89,3 +89,12 @@ function stripAccents(text: string): string {
 export function isSealed(title: string): boolean {
   return !OPENED_PRODUCT_PATTERN.test(stripAccents(title));
 }
+
+// Entrées watchlist représentant un produit scellé (par opposition à une carte à l'unité) :
+// identifiables par leur nom. "display" matche aussi "demi-display" (le mot y est présent).
+// Utilisé par scheduler.ts (filtre isSealed) et discord.ts (choix de l'emoji/couleur d'embed).
+const SEALED_PRODUCT_NAME_PATTERN = /\b(display|etb|bundle|tripack|booster)\b/i;
+
+export function isSealedProductEntry(entryName: string): boolean {
+  return SEALED_PRODUCT_NAME_PATTERN.test(entryName);
+}

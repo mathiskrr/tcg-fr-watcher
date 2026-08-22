@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { sendNewListingAlert } from "../src/discord.js";
+import { sendNewListingAlert, type AlertContext } from "../src/discord.js";
 import type { MarketplaceItem } from "../src/types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -13,6 +13,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const fixtures: MarketplaceItem[] = JSON.parse(
   readFileSync(join(__dirname, "fixtures/listing-items.json"), "utf-8")
 );
+
+const testEntry: AlertContext = { name: "Dracaufeu ex 199 (base)", set: "ME05 - Nuit Noire" };
 
 interface CapturedCall {
   url: string;
@@ -46,7 +48,7 @@ test("sendNewListingAlert - construit un embed conforme pour chaque fixture", as
     () => new Response(null, { status: 204 }),
     async (calls) => {
       for (const item of fixtures) {
-        await sendNewListingAlert(item, 1);
+        await sendNewListingAlert(item, testEntry, 1);
       }
 
       assert.equal(calls.length, fixtures.length);
@@ -55,12 +57,20 @@ test("sendNewListingAlert - construit un embed conforme pour chaque fixture", as
         const item = fixtures[i];
         const embed = call.body.embeds[0];
 
-        assert.equal(embed.title, item.title);
+        // Titre : "(FR)" final retiré, pas d'emoji de rareté pour cette entrée générique
+        // (ni Gold/SIR/AR/UR, ni produit scellé).
+        assert.equal(embed.title, item.title.replace(/\s*\(fr\)\s*$/i, "").trim());
         assert.equal(embed.url, item.url);
-        assert.equal(embed.fields.length, 1);
-        assert.equal(embed.fields[0].name, "Prix");
-        assert.equal(embed.fields[0].value, `${item.price.toFixed(2)} €`);
-        assert.match(embed.footer.text, new RegExp(item.itemId));
+
+        assert.equal(embed.fields.length, 2);
+        assert.equal(embed.fields[0].name, "💰 Prix");
+        assert.equal(embed.fields[0].value, `**${item.price.toFixed(2)} €**`);
+        assert.equal(embed.fields[1].name, "Annonce");
+        assert.equal(embed.fields[1].value, `[🔗 Voir l'annonce](${item.url})`);
+
+        assert.equal(embed.footer.text, testEntry.set);
+        assert.ok(embed.timestamp, "un timestamp doit être présent");
+        assert.ok(!Number.isNaN(Date.parse(embed.timestamp)), "le timestamp doit être une date ISO valide");
 
         if (item.imageUrl) {
           assert.equal(embed.thumbnail.url, item.imageUrl);
@@ -72,11 +82,52 @@ test("sendNewListingAlert - construit un embed conforme pour chaque fixture", as
   );
 });
 
+test("sendNewListingAlert - retire le '(FR)' redondant en fin de titre", async () => {
+  await withMockedFetch(
+    () => new Response(null, { status: 204 }),
+    async (calls) => {
+      const item = { ...fixtures[0], title: "Dracaufeu ex 199 Nuit Noire (FR)" };
+      await sendNewListingAlert(item, testEntry, 1);
+
+      assert.equal(calls[0].body.embeds[0].title, "Dracaufeu ex 199 Nuit Noire");
+    }
+  );
+});
+
+test("sendNewListingAlert - couleur et emoji selon la rareté détectée dans le nom de l'entrée", async () => {
+  const cases: Array<{ entryName: string; expectedEmoji: string; expectedColor: number }> = [
+    { entryName: "Méga-Darkrai-ex 120/084 (Gold)", expectedEmoji: "🌟", expectedColor: 0xf1c40f },
+    { entryName: "Méga-Darkrai-ex 116/084 (SIR)", expectedEmoji: "🌟", expectedColor: 0x9b59b6 },
+    { entryName: "Mimantis 085/084 (AR)", expectedEmoji: "✨", expectedColor: 0x3498db },
+    { entryName: "Floramantis-ex 096/084 (UR)", expectedEmoji: "✨", expectedColor: 0x3498db },
+    { entryName: "Display Nuit Noire (36 boosters)", expectedEmoji: "📦", expectedColor: 0x95a5a6 },
+    { entryName: "ETB Nuit Noire", expectedEmoji: "📦", expectedColor: 0x95a5a6 },
+    { entryName: "Dracaufeu ex 199 (base)", expectedEmoji: "", expectedColor: 0x95a5a6 },
+  ];
+
+  for (const { entryName, expectedEmoji, expectedColor } of cases) {
+    await withMockedFetch(
+      () => new Response(null, { status: 204 }),
+      async (calls) => {
+        const entry: AlertContext = { name: entryName, set: "ME05 - Nuit Noire" };
+        await sendNewListingAlert(fixtures[0], entry, 1);
+
+        const embed = calls[0].body.embeds[0];
+        assert.equal(embed.color, expectedColor, `couleur pour "${entryName}"`);
+        const expectedTitle = expectedEmoji
+          ? `${expectedEmoji} ${fixtures[0].title.replace(/\s*\(fr\)\s*$/i, "").trim()}`
+          : fixtures[0].title.replace(/\s*\(fr\)\s*$/i, "").trim();
+        assert.equal(embed.title, expectedTitle, `titre/emoji pour "${entryName}"`);
+      }
+    );
+  }
+});
+
 test("sendNewListingAlert - lève une erreur si le webhook Discord répond en échec", async () => {
   await withMockedFetch(
     () => new Response("bad request", { status: 400 }),
     async () => {
-      await assert.rejects(() => sendNewListingAlert(fixtures[0], 1));
+      await assert.rejects(() => sendNewListingAlert(fixtures[0], testEntry, 1));
     }
   );
 });
@@ -94,9 +145,9 @@ test("sendNewListingAlert - espace les envois consécutifs d'au moins minInterva
     () => new Response(null, { status: 204 }),
     async () => {
       const start = performance.now();
-      await sendNewListingAlert(fixtures[0], minIntervalMs);
+      await sendNewListingAlert(fixtures[0], testEntry, minIntervalMs);
       const afterFirst = performance.now();
-      await sendNewListingAlert(fixtures[1], minIntervalMs);
+      await sendNewListingAlert(fixtures[1], testEntry, minIntervalMs);
       const afterSecond = performance.now();
 
       const firstCallDuration = afterFirst - start;
@@ -130,7 +181,7 @@ test("sendNewListingAlert - sur 429, attend exactement retry_after (indiqué par
     },
     async (calls) => {
       const start = performance.now();
-      await sendNewListingAlert(fixtures[0], 1);
+      await sendNewListingAlert(fixtures[0], testEntry, 1);
       const elapsed = performance.now() - start;
 
       assert.equal(calls.length, 2, "doit avoir retenté une fois après le 429");
@@ -154,7 +205,10 @@ test("sendNewListingAlert - abandonne (sans 3e essai) si le retry après 429 éc
       return rateLimitedResponse(0.01);
     },
     async (calls) => {
-      await assert.rejects(() => sendNewListingAlert(fixtures[0], 1), /Envoi webhook Discord échoué: 429/);
+      await assert.rejects(
+        () => sendNewListingAlert(fixtures[0], testEntry, 1),
+        /Envoi webhook Discord échoué: 429/
+      );
 
       assert.equal(calls.length, 2, "un seul retry doit être tenté, jamais plus");
       assert.equal(errorSpy.mock.callCount(), 1);
@@ -169,7 +223,10 @@ test("sendNewListingAlert - abandonne immédiatement (sans retry) si le 429 n'a 
   await withMockedFetch(
     () => new Response("pas du JSON", { status: 429 }),
     async (calls) => {
-      await assert.rejects(() => sendNewListingAlert(fixtures[0], 1), /Envoi webhook Discord échoué: 429/);
+      await assert.rejects(
+        () => sendNewListingAlert(fixtures[0], testEntry, 1),
+        /Envoi webhook Discord échoué: 429/
+      );
 
       assert.equal(calls.length, 1, "aucun retry sans retry_after exploitable");
       assert.equal(errorSpy.mock.callCount(), 1);
