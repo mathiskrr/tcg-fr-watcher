@@ -1,3 +1,6 @@
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 // Logique de connexion Vinted, séparée de vintedAuth.ts (qui pilote un vrai navigateur
 // Playwright) pour rester testable SANS jamais lancer de navigateur réel : LoginPage est un
 // sous-ensemble minimal de l'API Page de Playwright, qu'un vrai objet Page satisfait
@@ -19,6 +22,7 @@ export interface LoginPage {
   waitForSelector(selector: string, options?: { timeout?: number }): Promise<unknown>;
   content(): Promise<string>;
   context(): LoginPageContext;
+  screenshot(options: { path: string }): Promise<unknown>;
 }
 
 export type LoginOutcome =
@@ -38,10 +42,33 @@ const EMAIL_SELECTOR = 'input[name="email"], input[type="email"]';
 const PASSWORD_SELECTOR = 'input[name="password"], input[type="password"]';
 const SUBMIT_SELECTOR = 'button[type="submit"]';
 
-const NAV_TIMEOUT_MS = 20_000;
-const FORM_TIMEOUT_MS = 10_000;
-const POST_SUBMIT_TIMEOUT_MS = 15_000;
+// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
+// Timeouts relevés à 30s (au lieu de 20s/10s/15s) et captures d'écran à chaque étape clé,
+// le temps de diagnostiquer un échec "timeout" constaté en prod (page lente ? sélecteur
+// obsolète ? vrai blocage anti-bot ?). À RETIRER (ou au moins redescendre les timeouts et
+// désactiver les captures) une fois la cause identifiée -- voir README section
+// "Renouvellement automatique du token".
+const NAV_TIMEOUT_MS = 30_000;
+const FORM_TIMEOUT_MS = 30_000;
+const POST_SUBMIT_TIMEOUT_MS = 30_000;
 const POLL_INTERVAL_MS = 500;
+
+const DEBUG_SCREENSHOTS_ENABLED = true;
+
+async function debugScreenshot(page: LoginPage, step: string): Promise<void> {
+  if (!DEBUG_SCREENSHOTS_ENABLED) return;
+
+  const filePath = join(tmpdir(), `vinted-debug-${step}-${Date.now()}.png`);
+  try {
+    await page.screenshot({ path: filePath });
+    console.log(`[vintedLoginFlow][debug] capture sauvegardée (étape "${step}"): ${filePath}`);
+  } catch (err) {
+    // Une capture qui échoue ne doit jamais faire échouer le login lui-même -- c'est un outil
+    // de diagnostic, pas une étape fonctionnelle.
+    console.error(`[vintedLoginFlow][debug] échec de la capture (étape "${step}"):`, err);
+  }
+}
+// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
@@ -70,6 +97,20 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Traduit une erreur survenue à une étape précise en LoginOutcome, en loggant PRÉCISÉMENT
+// quelle étape (et, le cas échéant, quel sélecteur) a échoué -- avant, un seul try/catch
+// global autour de tout le parcours ne permettait pas de savoir si "timeout" venait de la
+// navigation, d'un sélecteur introuvable, ou d'autre chose.
+function classifyStepError(stepDescription: string, err: unknown): LoginOutcome {
+  const message = err instanceof Error ? err.message : String(err);
+  console.error(`[vintedLoginFlow] échec à l'étape "${stepDescription}": ${message}`);
+
+  if (err instanceof Error && /timeout/i.test(err.message)) {
+    return { status: "timeout" };
+  }
+  return { status: "unknown_error", message: `${stepDescription}: ${message}` };
+}
+
 // Attend, après soumission du formulaire, soit le cookie de session (succès), soit un des
 // motifs d'erreur ci-dessus dans le HTML de la page -- par sondage (le cookie n'est pas
 // observable via waitForSelector, qui ne porte que sur le DOM). "timeout" si aucune des deux
@@ -95,6 +136,9 @@ async function waitForOutcome(page: LoginPage, deadlineMs: number, pollIntervalM
     await sleep(pollIntervalMs);
   }
 
+  console.error(
+    `[vintedLoginFlow] échec à l'étape "attente de l'issue post-soumission (cookie ${ACCESS_TOKEN_COOKIE_NAME} ou motif d'erreur connu)": aucun des deux n'est apparu en ${deadlineMs}ms`
+  );
   return { status: "timeout" };
 }
 
@@ -115,21 +159,37 @@ export async function performVintedLogin(
 ): Promise<LoginOutcome> {
   try {
     await page.goto(LOGIN_URL, { timeout: navTimeoutMs });
-    await page.waitForSelector(EMAIL_SELECTOR, { timeout: formTimeoutMs });
-
-    await page.fill(EMAIL_SELECTOR, email);
-    await page.fill(PASSWORD_SELECTOR, password);
-    await page.click(SUBMIT_SELECTOR);
-
-    return await waitForOutcome(page, postSubmitTimeoutMs, pollIntervalMs);
   } catch (err) {
-    // Un timeout Playwright (goto/waitForSelector qui expire, ex: page trop lente ou
-    // sélecteur introuvable) atterrit ici -- traité comme "timeout" (retenté au prochain
-    // cycle) plutôt que remonté tel quel, pour ne pas faire remonter un détail d'implémentation
-    // Playwright jusqu'à l'appelant.
-    if (err instanceof Error && /timeout/i.test(err.message)) {
-      return { status: "timeout" };
-    }
-    return { status: "unknown_error", message: err instanceof Error ? err.message : String(err) };
+    return classifyStepError("navigation vers la page de login (page.goto)", err);
   }
+  await debugScreenshot(page, "01-arrivee-sur-la-page");
+
+  try {
+    await page.waitForSelector(EMAIL_SELECTOR, { timeout: formTimeoutMs });
+  } catch (err) {
+    return classifyStepError(`attente du champ email (sélecteur: ${EMAIL_SELECTOR})`, err);
+  }
+
+  try {
+    await page.fill(EMAIL_SELECTOR, email);
+  } catch (err) {
+    return classifyStepError(`remplissage du champ email (sélecteur: ${EMAIL_SELECTOR})`, err);
+  }
+  await debugScreenshot(page, "02-apres-email-rempli");
+
+  try {
+    await page.fill(PASSWORD_SELECTOR, password);
+  } catch (err) {
+    return classifyStepError(`remplissage du champ mot de passe (sélecteur: ${PASSWORD_SELECTOR})`, err);
+  }
+  await debugScreenshot(page, "03-apres-mot-de-passe-rempli");
+
+  try {
+    await page.click(SUBMIT_SELECTOR);
+  } catch (err) {
+    return classifyStepError(`clic sur le bouton de connexion (sélecteur: ${SUBMIT_SELECTOR})`, err);
+  }
+  await debugScreenshot(page, "04-apres-clic-connexion");
+
+  return await waitForOutcome(page, postSubmitTimeoutMs, pollIntervalMs);
 }

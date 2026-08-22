@@ -14,13 +14,22 @@ interface MockPageOptions {
   html?: string;
   failGoto?: boolean;
   failWaitForSelector?: boolean;
+  screenshotCalls?: string[]; // rempli au fil des appels à screenshot(), si fourni
+  failScreenshot?: boolean;
 }
 
 // Implémente LoginPage à la main (aucune dépendance à playwright-chromium) : c'est tout
 // l'intérêt de la séparation avec vintedAuth.ts -- ces tests ne lancent jamais de vrai
 // navigateur.
 function makeMockPage(options: MockPageOptions = {}): LoginPage {
-  const { cookies = [], html = "<html></html>", failGoto = false, failWaitForSelector = false } = options;
+  const {
+    cookies = [],
+    html = "<html></html>",
+    failGoto = false,
+    failWaitForSelector = false,
+    screenshotCalls,
+    failScreenshot = false,
+  } = options;
 
   return {
     async goto(_url, _opts) {
@@ -40,6 +49,10 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
           return cookies;
         },
       };
+    },
+    async screenshot({ path }) {
+      if (failScreenshot) throw new Error("disque plein");
+      screenshotCalls?.push(path);
     },
   };
 }
@@ -179,7 +192,10 @@ test("performVintedLogin - une erreur Playwright non liée à un timeout est cla
     FAST_POLL_INTERVAL_MS
   );
 
-  assert.deepEqual(outcome, { status: "unknown_error", message: "net::ERR_NAME_NOT_RESOLVED" });
+  assert.deepEqual(outcome, {
+    status: "unknown_error",
+    message: "navigation vers la page de login (page.goto): net::ERR_NAME_NOT_RESOLVED",
+  });
 });
 
 test("performVintedLogin - ne fait jamais fuiter le mot de passe dans une erreur 'unknown_error'", async () => {
@@ -202,4 +218,75 @@ test("performVintedLogin - ne fait jamais fuiter le mot de passe dans une erreur
 
   assert.equal(outcome.status, "unknown_error");
   assert.doesNotMatch(JSON.stringify(outcome), /un-mot-de-passe-tres-secret/);
+});
+
+test("performVintedLogin - [debug] prend une capture à chaque étape clé, dans l'ordre", async () => {
+  const screenshotPaths: string[] = [];
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "eyJ.abc.def" }],
+    screenshotCalls: screenshotPaths,
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "eyJ.abc.def" });
+  assert.equal(screenshotPaths.length, 4, "arrivée page, après email, après mot de passe, après clic connexion");
+  assert.match(screenshotPaths[0], /vinted-debug-01-arrivee-sur-la-page-\d+\.png$/);
+  assert.match(screenshotPaths[1], /vinted-debug-02-apres-email-rempli-\d+\.png$/);
+  assert.match(screenshotPaths[2], /vinted-debug-03-apres-mot-de-passe-rempli-\d+\.png$/);
+  assert.match(screenshotPaths[3], /vinted-debug-04-apres-clic-connexion-\d+\.png$/);
+});
+
+test("performVintedLogin - [debug] une capture qui échoue n'empêche pas le login de continuer (best-effort)", async (t) => {
+  const errorSpy = t.mock.method(console, "error", () => {});
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "token-malgre-echec-capture" }],
+    failScreenshot: true,
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "token-malgre-echec-capture" });
+  assert.ok(
+    errorSpy.mock.calls.some((c) => /échec de la capture/.test(String(c.arguments[0]))),
+    "l'échec de la capture doit être loggé, sans jamais interrompre le login"
+  );
+});
+
+test("performVintedLogin - [debug] logge précisément le sélecteur qui a échoué", async (t) => {
+  const errorSpy = t.mock.method(console, "error", () => {});
+  const page = makeMockPage({ failWaitForSelector: true });
+
+  await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.ok(
+    errorSpy.mock.calls.some((c) =>
+      /attente du champ email.*input\[name="email"\]/.test(String(c.arguments[0]))
+    ),
+    "doit nommer précisément l'étape et le sélecteur qui ont échoué"
+  );
 });
