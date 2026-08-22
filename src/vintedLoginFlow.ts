@@ -74,6 +74,38 @@ async function debugScreenshot(page: LoginPage, step: string): Promise<void> {
 }
 // --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
+// Cas réel diagnostiqué : une popup de consentement cookies (RGPD, overlay gris + popup
+// blanche) bloquait l'accès au formulaire de login -- d'où le timeout persistant sur
+// EMAIL_SELECTOR malgré une LOGIN_URL correcte. Sélecteurs essayés dans l'ordre en un seul
+// waitForSelector (Playwright : une liste séparée par des virgules matche le premier trouvé),
+// best-effort comme les sélecteurs du formulaire : bandeaux tiers (OneTrust très répandu),
+// aucune garantie de stabilité.
+const COOKIE_CONSENT_SELECTOR = [
+  "button#onetrust-accept-btn-handler",
+  'button[id*="accept" i]',
+  'button[class*="cookie" i]:has-text("Tout accepter")',
+  'button[class*="cookie" i]:has-text("Accepter")',
+  'button:has-text("Tout accepter")',
+  'button:has-text("Accepter")',
+].join(", ");
+
+// Timeout volontairement court : la popup n'apparaît pas systématiquement (dépend des cookies
+// déjà présents dans le contexte navigateur) -- ne pas ralentir chaque login de 30s pour un
+// scénario qui ne se présente qu'une partie du temps.
+const COOKIE_CONSENT_TIMEOUT_MS = 5_000;
+
+// Ne lève JAMAIS d'exception : l'absence de popup n'est pas une erreur, et une popup présente
+// mais non cliquée avec succès ne doit pas non plus bloquer la suite (best-effort pur).
+async function acceptCookieConsentIfPresent(page: LoginPage): Promise<void> {
+  try {
+    await page.waitForSelector(COOKIE_CONSENT_SELECTOR, { timeout: COOKIE_CONSENT_TIMEOUT_MS });
+    await page.click(COOKIE_CONSENT_SELECTOR);
+    console.log("[vintedLoginFlow] popup de consentement cookies détectée et acceptée");
+  } catch {
+    console.log("[vintedLoginFlow] aucune popup de consentement cookies détectée (ou déjà acceptée) -- on continue");
+  }
+}
+
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
 // Motifs observés empiriquement (aucune doc officielle Vinted sur son parcours anti-bot) --
@@ -167,6 +199,8 @@ export async function performVintedLogin(
     return classifyStepError("navigation vers la page de login (page.goto)", err);
   }
   await debugScreenshot(page, "01-apres-chargement-avant-selecteur-email");
+
+  await acceptCookieConsentIfPresent(page);
 
   try {
     await page.waitForSelector(EMAIL_SELECTOR, { timeout: formTimeoutMs });

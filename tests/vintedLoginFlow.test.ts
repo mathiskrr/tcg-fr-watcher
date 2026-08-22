@@ -13,9 +13,18 @@ interface MockPageOptions {
   cookies?: LoginPageCookie[];
   html?: string;
   failGoto?: boolean;
-  failWaitForSelector?: boolean;
+  failWaitForSelector?: boolean; // ne s'applique qu'au sélecteur email (voir isEmailSelector)
   screenshotCalls?: string[]; // rempli au fil des appels à screenshot(), si fourni
   failScreenshot?: boolean;
+  cookiePopupPresent?: boolean; // si true, le waitForSelector du consentement cookies "réussit"
+  clickCalls?: string[]; // rempli au fil des appels à click(), si fourni
+}
+
+// Le sélecteur email (EMAIL_SELECTOR) est le seul, dans le code de prod, à contenir ce
+// fragment -- permet au mock de distinguer "on attend le champ email" de "on attend le bouton
+// de consentement cookies" sans avoir à exporter les constantes internes de vintedLoginFlow.ts.
+function isEmailSelector(selector: string): boolean {
+  return selector.includes('input[name="email"]');
 }
 
 // Implémente LoginPage à la main (aucune dépendance à playwright-chromium) : c'est tout
@@ -29,6 +38,8 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     failWaitForSelector = false,
     screenshotCalls,
     failScreenshot = false,
+    cookiePopupPresent = false,
+    clickCalls,
   } = options;
 
   return {
@@ -36,9 +47,16 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
       if (failGoto) throw new Error("Timeout 50ms exceeded while navigating");
     },
     async fill(_selector, _value) {},
-    async click(_selector) {},
-    async waitForSelector(_selector, _opts) {
-      if (failWaitForSelector) throw new Error("Timeout 50ms exceeded while waiting for selector");
+    async click(selector) {
+      clickCalls?.push(selector);
+    },
+    async waitForSelector(selector, _opts) {
+      if (isEmailSelector(selector)) {
+        if (failWaitForSelector) throw new Error("Timeout 50ms exceeded while waiting for selector");
+        return;
+      }
+      // Sinon : c'est l'attente du bouton de consentement cookies.
+      if (!cookiePopupPresent) throw new Error("Timeout 5000ms exceeded while waiting for selector");
     },
     async content() {
       return html;
@@ -300,5 +318,59 @@ test("performVintedLogin - [debug] une capture qui échoue n'empêche pas le log
   assert.ok(
     errorSpy.mock.calls.some((c) => /échec de la capture/.test(String(c.arguments[0]))),
     "l'échec de la capture doit être loggé, sans jamais interrompre le login"
+  );
+});
+
+test("performVintedLogin - popup de consentement cookies présente : cliquée, puis le login procède normalement (cas réel diagnostiqué)", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const clickCalls: string[] = [];
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "token-apres-popup-cookies" }],
+    cookiePopupPresent: true,
+    clickCalls,
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "token-apres-popup-cookies" });
+  assert.ok(
+    logSpy.mock.calls.some((c) => /consentement cookies détectée et acceptée/.test(String(c.arguments[0]))),
+    "doit logger que la popup a été détectée et acceptée"
+  );
+  // Le clic sur le bouton de consentement doit précéder celui sur le bouton de connexion.
+  assert.equal(clickCalls.length, 2);
+  assert.match(clickCalls[0], /accept|cookie/i);
+  assert.equal(clickCalls[1], 'button[type="submit"]');
+});
+
+test("performVintedLogin - pas de popup de consentement cookies : aucune erreur, le login procède normalement", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "token-sans-popup" }],
+    cookiePopupPresent: false,
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "token-sans-popup" });
+  assert.ok(
+    logSpy.mock.calls.some((c) => /aucune popup de consentement cookies détectée/.test(String(c.arguments[0]))),
+    "doit logger l'absence de popup sans lever d'erreur"
   );
 });
