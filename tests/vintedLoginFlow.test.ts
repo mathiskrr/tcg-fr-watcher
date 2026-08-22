@@ -40,6 +40,8 @@ interface MockPageOptions {
   cookiePopupPresent?: boolean; // si true, le waitForSelector du consentement cookies "réussit" (sur la page principale)
   clickCalls?: string[]; // rempli au fil des appels à click() sur la page principale, si fourni
   frames?: LoginFrame[]; // iframes de la page, vide par défaut (voir makeMockFrame)
+  failSubmitClick?: boolean; // ne s'applique qu'au clic sur le bouton de connexion (voir isSubmitSelector)
+  evaluateResult?: unknown; // valeur renvoyée par evaluate(), SANS jamais exécuter la fonction fournie (pas de vrai DOM en test)
 }
 
 // Le sélecteur email (EMAIL_SELECTOR) est le seul, dans le code de prod, à contenir ce
@@ -47,6 +49,10 @@ interface MockPageOptions {
 // de consentement cookies" sans avoir à exporter les constantes internes de vintedLoginFlow.ts.
 function isEmailSelector(selector: string): boolean {
   return selector.includes('input[name="username"]');
+}
+
+function isSubmitSelector(selector: string): boolean {
+  return selector === 'button[type="submit"]';
 }
 
 // Implémente LoginPage à la main (aucune dépendance à playwright-chromium) : c'est tout
@@ -61,6 +67,8 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     cookiePopupPresent = false,
     clickCalls,
     frames = [],
+    failSubmitClick = false,
+    evaluateResult = [],
   } = options;
 
   return {
@@ -69,6 +77,9 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     },
     async fill(_selector, _value) {},
     async click(selector) {
+      if (isSubmitSelector(selector) && failSubmitClick) {
+        throw new Error("locator.click: Timeout 30000ms exceeded");
+      }
       clickCalls?.push(selector);
     },
     async waitForSelector(selector, _opts) {
@@ -91,6 +102,11 @@ function makeMockPage(options: MockPageOptions = {}): LoginPage {
     },
     frames() {
       return frames;
+    },
+    // N'exécute JAMAIS `pageFunction` (elle référence `document`, inexistant en Node/test) --
+    // renvoie directement la valeur configurée par le test.
+    async evaluate<T>(_pageFunction: () => T): Promise<T> {
+      return evaluateResult as T;
     },
   };
 }
@@ -397,5 +413,58 @@ test("performVintedLogin - un iframe présent mais qui ne correspond à aucun CM
   assert.ok(
     logSpy.mock.calls.some((c) => /consentement cookies détectée et acceptée/.test(String(c.arguments[0]))),
     "doit quand même trouver et cliquer le bouton, sur la page principale cette fois"
+  );
+});
+
+test("performVintedLogin - [debug] liste les attributs de chaque <button> quand le clic sur le bouton de connexion échoue (cas réel diagnostiqué)", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const page = makeMockPage({
+    failSubmitClick: true,
+    evaluateResult: [
+      { text: "Se connecter", type: null, id: "login-submit-btn", className: "web_ui__Button__button web_ui__Button__filled", ariaLabel: null },
+      { text: "Continuer avec Google", type: "button", id: null, className: "web_ui__Button__button", ariaLabel: "Continuer avec Google" },
+    ],
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.equal(outcome.status, "timeout");
+  const messages = logSpy.mock.calls.map((c) => String(c.arguments[0]));
+  assert.ok(messages.some((m) => /2 <button> trouvé\(s\)/.test(m)));
+  assert.ok(messages.some((m) => m.includes("login-submit-btn") && m.includes("Se connecter")));
+  assert.ok(messages.some((m) => m.includes('aria-label=Continuer avec Google')));
+});
+
+test("performVintedLogin - [debug] une lecture des <button> qui échoue n'empêche pas la classification normale de l'erreur", async (t) => {
+  const errorSpy = t.mock.method(console, "error", () => {});
+  const page: LoginPage = {
+    ...makeMockPage({ failSubmitClick: true }),
+    async evaluate() {
+      throw new Error("evaluate non disponible");
+    },
+  };
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS
+  );
+
+  assert.equal(outcome.status, "timeout");
+  assert.ok(
+    errorSpy.mock.calls.some((c) => /échec de la lecture des <button>/.test(String(c.arguments[0]))),
+    "l'échec de la lecture doit être loggé, sans empêcher la classification normale de l'erreur"
   );
 });

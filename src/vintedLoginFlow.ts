@@ -32,6 +32,8 @@ export interface LoginPage extends LoginClickTarget {
   content(): Promise<string>;
   context(): LoginPageContext;
   frames(): LoginFrame[];
+  // Exécuté dans le contexte du navigateur (pas Node) -- voir debugLogButtonAttributes.
+  evaluate<T>(pageFunction: () => T): Promise<T>;
 }
 
 export type LoginOutcome =
@@ -124,6 +126,44 @@ async function acceptCookieConsentIfPresent(page: LoginPage): Promise<void> {
     console.log("[vintedLoginFlow] aucune popup de consentement cookies détectée (ou déjà acceptée) -- on continue");
   }
 }
+
+// --- DEBUG TEMPORAIRE -------------------------------------------------------------------
+// Email et mot de passe se remplissent désormais correctement (EMAIL_SELECTOR corrigé), mais
+// le clic sur SUBMIT_SELECTOR (button[type="submit"]) échoue -- signe que le bouton de
+// connexion n'a probablement pas type="submit". Liste TOUS les attributs pertinents (texte,
+// type, id, class, aria-label) de chaque <button> de la page au moment de l'échec, pour
+// identifier le vrai sélecteur à utiliser. À RETIRER une fois le bon sélecteur trouvé.
+interface DebugButtonSnapshot {
+  text: string | null;
+  type: string | null;
+  id: string | null;
+  className: string | null;
+  ariaLabel: string | null;
+}
+
+async function debugLogButtonAttributes(page: LoginPage): Promise<void> {
+  try {
+    const buttons = await page.evaluate<DebugButtonSnapshot[]>(() =>
+      Array.from(document.querySelectorAll("button")).map((el) => ({
+        text: el.textContent?.trim().replace(/\s+/g, " ") ?? null,
+        type: el.getAttribute("type"),
+        id: el.getAttribute("id"),
+        className: el.getAttribute("class"),
+        ariaLabel: el.getAttribute("aria-label"),
+      }))
+    );
+
+    console.log(`[vintedLoginFlow][debug] ${buttons.length} <button> trouvé(s) sur la page:`);
+    buttons.forEach((button, i) => {
+      console.log(
+        `[vintedLoginFlow][debug]   [${i}] text="${button.text}" type=${button.type} id=${button.id} class="${button.className}" aria-label=${button.ariaLabel}`
+      );
+    });
+  } catch (err) {
+    console.error("[vintedLoginFlow][debug] échec de la lecture des <button> de la page:", err);
+  }
+}
+// --- FIN DEBUG TEMPORAIRE ----------------------------------------------------------------
 
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
 
@@ -241,6 +281,7 @@ export async function performVintedLogin(
   try {
     await page.click(SUBMIT_SELECTOR);
   } catch (err) {
+    await debugLogButtonAttributes(page); // DEBUG TEMPORAIRE -- voir commentaire plus haut
     return classifyStepError(`clic sur le bouton de connexion (sélecteur: ${SUBMIT_SELECTOR})`, err);
   }
 
