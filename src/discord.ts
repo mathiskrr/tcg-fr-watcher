@@ -77,6 +77,22 @@ function cleanTitle(title: string): string {
   return title.replace(TRAILING_FR_TAG_PATTERN, "").trim();
 }
 
+// Retire le suffixe de rareté entre parenthèses en fin de `name` ("(SIR)", "(CC)",
+// "(Futuriste Rare)", "(36 boosters)"...) : pas pertinent comme terme de recherche Cardmarket,
+// et parfois trompeur (ex: chercher "(CC)" littéralement).
+const TRAILING_PAREN_SUFFIX_PATTERN = /\s*\([^)]*\)\s*$/;
+
+// Pas d'API Cardmarket utilisée ici (réservée aux vendeurs professionnels, voir discussion) --
+// simple lien de recherche vers leur propre site, que l'utilisateur ouvre lui-même dans son
+// navigateur pour comparer manuellement. Gratuit, aucune clé/quota, mais pas de prix récupéré
+// automatiquement : juste un raccourci vers une recherche pré-remplie.
+function cardmarketSearchUrl(entryName: string): string {
+  const query = entryName.replace(TRAILING_PAREN_SUFFIX_PATTERN, "").trim();
+  const url = new URL("https://www.cardmarket.com/fr/Pokemon/Products/Search");
+  url.searchParams.set("searchString", query);
+  return url.toString();
+}
+
 function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
   const { color, emojiPrefix } = detectRarityStyle(entry.name);
 
@@ -90,6 +106,9 @@ function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
       // Footer Discord = texte brut (pas de lien cliquable) : le lien vit dans un field à
       // la place, en markdown, pour rester réellement cliquable.
       { name: "Annonce", value: `[🔗 Voir l'annonce](${item.url})`, inline: true },
+      // Pas de prix Cardmarket automatique (voir cardmarketSearchUrl) : juste un raccourci pour
+      // comparer manuellement en un clic.
+      { name: "Comparer", value: `[🔍 Cardmarket](${cardmarketSearchUrl(entry.name)})`, inline: true },
     ],
     // `timestamp` (ISO8601) est un champ natif de l'embed Discord : combiné au footer, il
     // affiche "<set> • à l'instant" (ou l'heure exacte) sans avoir à le formater nous-mêmes.

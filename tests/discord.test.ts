@@ -63,11 +63,17 @@ test("sendNewListingAlert - construit un embed conforme pour chaque fixture", as
         assert.equal(embed.title, item.title.replace(/\s*\(fr\)\s*$/i, "").trim());
         assert.equal(embed.url, item.url);
 
-        assert.equal(embed.fields.length, 2);
+        assert.equal(embed.fields.length, 3);
         assert.equal(embed.fields[0].name, "💰 Prix");
         assert.equal(embed.fields[0].value, `**${item.price.toFixed(2)} €**`);
         assert.equal(embed.fields[1].name, "Annonce");
         assert.equal(embed.fields[1].value, `[🔗 Voir l'annonce](${item.url})`);
+        assert.equal(embed.fields[2].name, "Comparer");
+        const cardmarketLinkMatch = embed.fields[2].value.match(/^\[🔍 Cardmarket\]\((.+)\)$/);
+        assert.ok(cardmarketLinkMatch, "doit contenir un lien Cardmarket en markdown");
+        const cardmarketUrl = new URL(cardmarketLinkMatch[1]);
+        assert.equal(cardmarketUrl.origin + cardmarketUrl.pathname, "https://www.cardmarket.com/fr/Pokemon/Products/Search");
+        assert.equal(cardmarketUrl.searchParams.get("searchString"), "Dracaufeu ex 199");
 
         assert.equal(embed.footer.text, testEntry.set);
         assert.ok(embed.timestamp, "un timestamp doit être présent");
@@ -91,6 +97,20 @@ test("sendNewListingAlert - retire le '(FR)' redondant en fin de titre", async (
       await sendNewListingAlert(item, testEntry, 1);
 
       assert.equal(calls[0].body.embeds[0].title, "Dracaufeu ex 199 Nuit Noire");
+    }
+  );
+});
+
+test("sendNewListingAlert - le lien Cardmarket retire le suffixe de rareté entre parenthèses du nom de l'entrée", async () => {
+  await withMockedFetch(
+    () => Response.json({ id: "9999999999999999999" }),
+    async (calls) => {
+      const entry: AlertContext = { name: "Méga-Darkrai-ex 116/084 (SIR)", set: "ME05 - Nuit Noire" };
+      await sendNewListingAlert(fixtures[0], entry, 1);
+
+      const cardmarketField = calls[0].body.embeds[0].fields[2];
+      const cardmarketUrl = new URL(cardmarketField.value.match(/\((.+)\)$/)[1]);
+      assert.equal(cardmarketUrl.searchParams.get("searchString"), "Méga-Darkrai-ex 116/084");
     }
   );
 });

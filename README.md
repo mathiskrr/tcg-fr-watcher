@@ -265,6 +265,13 @@ plus bas) :
 - **Champ `Annonce`** : lien Markdown cliquable `[🔗 Voir l'annonce](url)` — un footer
   Discord ne peut afficher que du texte brut (jamais de lien cliquable), d'où ce champ dédié
   plutôt qu'un footer du type `item {id}`.
+- **Champ `Comparer`** : lien Markdown cliquable `[🔍 Cardmarket](url)` vers une recherche
+  Cardmarket pré-remplie avec le nom de la carte (suffixe de rareté entre parenthèses retiré,
+  ex: "(SIR)"/"(CC)" — pas pertinent comme terme de recherche). **Pas de prix Cardmarket
+  récupéré automatiquement** : l'API officielle Cardmarket est réservée aux vendeurs
+  professionnels, et les alternatives tierces qui exposent les prix (filtrables par langue)
+  sont payantes (~50$/mois minimum) — jugé disproportionné pour ce projet. Ce lien reste donc
+  un simple raccourci pour comparer manuellement en un clic, pas une comparaison automatique.
 - **Footer** : nom du `set` de l'entrée, combiné au `timestamp` natif de l'embed (Discord
   affiche l'heure d'envoi automatiquement, pas besoin de la formater à la main).
 
