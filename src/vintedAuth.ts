@@ -13,6 +13,27 @@ const BROWSER_LAUNCH_TIMEOUT_MS = 20_000;
 const DESKTOP_CHROME_USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+// Cas réel diagnostiqué (2026-09) : Vinted/Cloudflare renvoie une page de challenge ("Please
+// wait... Enable JavaScript and cookies to continue") à la place du formulaire de login,
+// faisant échouer performVintedLogin en timeout sur EMAIL_SELECTOR avant même d'atteindre le
+// formulaire. Chromium piloté par Playwright expose par défaut `navigator.webdriver = true` et
+// se lance avec des flags d'automatisation détectables -- des signaux forts pour les
+// heuristiques anti-bot de Cloudflare. Rien ici ne garantit de passer le challenge (Cloudflare
+// peut aussi challenger sur réputation d'IP, indépendamment du fingerprint du navigateur), mais
+// réduit les signaux les plus évidents sans contrepartie -- best-effort, voir aussi le fallback
+// manuel (server.ts POST /token) qui reste nécessaire si Cloudflare persiste à bloquer.
+const STEALTH_LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"];
+
+// Exécuté avant tout script de la page (context.addInitScript) : masque les traces
+// d'automatisation les plus vérifiées par les scripts anti-bot (navigator.webdriver, absence
+// de plugins/languages réalistes, objet window.chrome manquant sur un vrai Chrome desktop).
+const STEALTH_INIT_SCRIPT = `
+  Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+  Object.defineProperty(navigator, 'languages', { get: () => ['fr-FR', 'fr', 'en-US', 'en'] });
+  Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+  window.chrome = window.chrome || { runtime: {} };
+`;
+
 // Traduit l'issue de performVintedLogin en action concrète (mise à jour du tokenStore) et en
 // log clair. Séparée de renewVintedTokenViaLogin pour rester testable sans navigateur réel
 // (voir tests/vintedAuth.test.ts) : ne fait que de la logique/logging, aucun I/O navigateur.
@@ -70,10 +91,23 @@ export async function renewVintedTokenViaLogin(): Promise<void> {
 
   let browser: Browser | undefined;
   try {
-    browser = await chromium.launch({ headless: true, timeout: BROWSER_LAUNCH_TIMEOUT_MS });
+    browser = await chromium.launch({
+      headless: true,
+      timeout: BROWSER_LAUNCH_TIMEOUT_MS,
+      args: STEALTH_LAUNCH_ARGS,
+    });
     // newContext (pas newPage directement) : userAgent ne se règle qu'à la création du
-    // contexte côté Playwright, pas après coup sur une page déjà créée.
-    const context = await browser.newContext({ userAgent: DESKTOP_CHROME_USER_AGENT });
+    // contexte côté Playwright, pas après coup sur une page déjà créée. locale/timezoneId/
+    // viewport alignés sur un vrai desktop FR -- des valeurs par défaut trop génériques
+    // (locale vide, viewport headless standard) sont elles aussi vérifiées par certaines
+    // heuristiques anti-bot.
+    const context = await browser.newContext({
+      userAgent: DESKTOP_CHROME_USER_AGENT,
+      locale: "fr-FR",
+      timezoneId: "Europe/Paris",
+      viewport: { width: 1920, height: 1080 },
+    });
+    await context.addInitScript(STEALTH_INIT_SCRIPT);
     const page = await context.newPage();
     const outcome = await performVintedLogin(page, email, password);
     applyLoginOutcome(outcome);
