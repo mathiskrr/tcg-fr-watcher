@@ -1,9 +1,10 @@
-// Renouvellement du token Vinted par simple visite anonyme (aucun identifiant, aucun
-// navigateur) -- remplace l'ancien renouvellement par login Playwright (voir historique git),
-// retiré car inutile : Vinted délivre un access_token_web valide à toute visite anonyme, sans
-// compte, comme confirmé empiriquement (voir README "Limitations connues"). Un simple GET vers
-// une page publique produit le même cookie qu'un vrai login, sans se battre contre le widget
-// Cloudflare Turnstile qui protège la page de login elle-même (jamais nécessaire ici).
+// Renouvellement de la session Vinted (cookie access_token_web + en-tête X-Anon-Id, tous deux
+// requis par searchVinted -- voir vinted.ts) par simple visite anonyme (aucun identifiant,
+// aucun navigateur) -- remplace l'ancien renouvellement par login Playwright (voir historique
+// git), retiré car inutile : Vinted délivre les deux à toute visite anonyme, sans compte, comme
+// confirmé empiriquement (voir README "Limitations connues"). Un simple GET vers une page
+// publique suffit, sans se battre contre le widget Cloudflare Turnstile qui protège la page de
+// login elle-même (jamais nécessaire ici).
 //
 // N'élimine pas complètement le risque de blocage anti-bot (Cloudflare/DataDome peuvent aussi
 // bloquer cette requête depuis certaines IP), mais reste un profil de trafic bien plus discret
@@ -12,13 +13,15 @@
 
 import { fetchWithRetry } from "./http.js";
 import { BROWSER_HEADERS, decodeJwtExpiry } from "./vinted.js";
-import { setVintedAccessToken } from "./tokenStore.js";
+import { setVintedAccessToken, setVintedAnonId } from "./tokenStore.js";
 
 // Page publique minimale : peu importe laquelle, Vinted pose le cookie sur toute réponse de son
-// domaine principal dès qu'aucune session valide n'est déjà présente côté serveur.
+// domaine principal dès qu'aucune session valide n'est déjà présente côté serveur, et renvoie
+// l'en-tête x-anon-id (voir fetchAnonymousVintedSession) sur la même réponse.
 const ANON_TOKEN_PAGE_URL = "https://www.vinted.fr/";
 
 const ACCESS_TOKEN_COOKIE_NAME = "access_token_web";
+const ANON_ID_HEADER_NAME = "x-anon-id";
 
 // Extrait la valeur d'un cookie nommé depuis les en-têtes Set-Cookie bruts d'une réponse
 // (`response.headers.getSetCookie()`, chaque entrée de la forme "nom=valeur; Attr1; Attr2...").
@@ -46,37 +49,56 @@ export function extractCookieValue(setCookieHeaders: string[], cookieName: strin
   return value;
 }
 
+export interface AnonymousVintedSession {
+  token: string | null;
+  anonId: string | null;
+}
+
 // retries/delayMsBase exposés (au lieu d'être en dur) pour les mêmes raisons que searchVinted
-// dans vinted.ts -- tests rapides et déterministes sans dépendre du vrai backoff.
-export async function fetchAnonymousVintedToken(retries = 3, delayMsBase = 1500): Promise<string | null> {
+// dans vinted.ts -- tests rapides et déterministes sans dépendre du vrai backoff. Récupère les
+// DEUX valeurs nécessaires à searchVinted (voir vinted.ts) en une seule requête : le cookie
+// access_token_web ET l'en-tête x-anon-id, tous deux posés par Vinted sur toute visite anonyme.
+export async function fetchAnonymousVintedSession(retries = 3, delayMsBase = 1500): Promise<AnonymousVintedSession> {
   const res = await fetchWithRetry(ANON_TOKEN_PAGE_URL, { headers: BROWSER_HEADERS }, retries, delayMsBase);
 
   const setCookieHeaders = typeof res.headers.getSetCookie === "function" ? res.headers.getSetCookie() : [];
-  return extractCookieValue(setCookieHeaders, ACCESS_TOKEN_COOKIE_NAME);
+  const token = extractCookieValue(setCookieHeaders, ACCESS_TOKEN_COOKIE_NAME);
+  const anonId = res.headers.get(ANON_ID_HEADER_NAME);
+
+  return { token, anonId };
 }
 
-// retries/delayMsBase exposés (au lieu d'être en dur), même raison que fetchAnonymousVintedToken
-// ci-dessus : permet aux tests du chemin d'erreur réseau de rester rapides sans attendre le
-// vrai backoff (voir tests/vintedTokenRefresh.test.ts).
+// retries/delayMsBase exposés (au lieu d'être en dur), même raison que
+// fetchAnonymousVintedSession ci-dessus : permet aux tests du chemin d'erreur réseau de rester
+// rapides sans attendre le vrai backoff (voir tests/vintedTokenRefresh.test.ts).
 export async function renewVintedTokenAnonymously(retries = 3, delayMsBase = 1500): Promise<void> {
   console.log("[vintedTokenRefresh] tentative de renouvellement anonyme du token Vinted...");
 
   try {
-    const token = await fetchAnonymousVintedToken(retries, delayMsBase);
+    const { token, anonId } = await fetchAnonymousVintedSession(retries, delayMsBase);
+
     if (!token) {
       console.warn(
         "[vintedTokenRefresh] aucun cookie access_token_web reçu (page Vinted peut-être bloquée) -- renouvellement manuel toujours disponible en secours (voir README)"
       );
-      return;
+    } else {
+      setVintedAccessToken(token);
+      const expiresAt = decodeJwtExpiry(token);
+      console.log(
+        `[vintedTokenRefresh] token Vinted renouvelé anonymement${
+          expiresAt !== null ? ` (expire le ${new Date(expiresAt).toISOString()})` : " (expiration non décodable)"
+        }`
+      );
     }
 
-    setVintedAccessToken(token);
-    const expiresAt = decodeJwtExpiry(token);
-    console.log(
-      `[vintedTokenRefresh] token Vinted renouvelé anonymement${
-        expiresAt !== null ? ` (expire le ${new Date(expiresAt).toISOString()})` : " (expiration non décodable)"
-      }`
-    );
+    if (!anonId) {
+      console.warn(
+        "[vintedTokenRefresh] aucun en-tête x-anon-id reçu -- les recherches Vinted échoueront probablement en 404 (voir vinted.ts)"
+      );
+    } else {
+      setVintedAnonId(anonId);
+      console.log("[vintedTokenRefresh] X-Anon-Id renouvelé anonymement");
+    }
   } catch (err) {
     console.error("[vintedTokenRefresh] échec du renouvellement anonyme:", err);
   }

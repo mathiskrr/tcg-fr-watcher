@@ -58,15 +58,23 @@ Le bot utilise le flux OAuth2 *Client Credentials* (application, sans utilisateu
 appeler la [Browse API](https://developer.ebay.com/api-docs/buy/browse/overview.html) — voir
 `src/ebay.ts`.
 
-### 2. Vinted (cookie de session)
+### 2. Vinted (cookie de session + X-Anon-Id)
 
-`src/vinted.ts` appelle l'endpoint interne utilisé par le site web (`/api/v2/catalog/items`),
-pas une API officielle documentée. En pratique, cet endpoint répond `HTTP 401
-invalid_authentication_token` sans cookie de session valide, même avec des en-têtes navigateur
-réalistes — il faut donc fournir manuellement le cookie `access_token_web` :
+`src/vinted.ts` appelle l'endpoint interne utilisé par le site web
+(`https://api.vinted.fr/svc-catalogue/items`), pas une API officielle documentée. Cet endpoint
+nécessite DEUX choses, toutes deux délivrées par Vinted à toute visite anonyme (aucun compte
+requis) :
+- le cookie de session `access_token_web` (répond `401` sans lui) ;
+- l'en-tête `X-Anon-Id` (répond `404` sans lui, PAS `401` — voir cas réel diagnostiqué ci-dessous).
 
-1. Va sur [vinted.fr](https://www.vinted.fr/) (**aucun compte requis** : Vinted délivre un
-   `access_token_web` valide à toute visite anonyme, ce cookie n'est pas lié à une connexion).
+En pratique, aucune des deux n'est à fournir manuellement : `vintedTokenRefresh.ts` récupère les
+deux automatiquement toutes les 12h (voir section dédiée plus bas). `VINTED_ACCESS_TOKEN_WEB`
+dans `.env` reste un secours manuel pour le cookie seul (voir ci-dessous) ; il n'existe pas
+d'équivalent `.env` pour `X-Anon-Id`, qui vit uniquement en mémoire (`tokenStore.ts`).
+
+Pour renouveler `access_token_web` à la main (secours si le renouvellement automatique échoue) :
+
+1. Va sur [vinted.fr](https://www.vinted.fr/) (aucun compte requis).
 2. Ouvre les DevTools du navigateur (F12) > onglet **Application** (Chrome) ou **Stockage** (Firefox)
    > **Cookies** > `https://www.vinted.fr`.
 3. Copie la valeur du cookie `access_token_web`.
@@ -75,12 +83,19 @@ réalistes — il faut donc fournir manuellement le cookie `access_token_web` :
    VINTED_ACCESS_TOKEN_WEB=eyJhbGciOi...
    ```
 
-C'est un JWT de courte durée (quelques heures). Le bot **décode sa date d'expiration** et logge
-un avertissement clair (`console.warn`) dès qu'il la dépasse, sans attendre une erreur — et si
+C'est un JWT de courte durée (~24h). Le bot **décode sa date d'expiration** et logge un
+avertissement clair (`console.warn`) dès qu'il la dépasse, sans attendre une erreur — et si
 Vinted répond quand même `401` (session invalidée pour une autre raison), un message tout aussi
 clair (`console.error`) explique comment le renouveler. Dans les deux cas, l'entrée concernée est
-simplement ignorée pour le cycle en cours (pas de crash). Sans cookie configuré du tout, le bot
-continue de tourner mais les requêtes Vinted échoueront très probablement en 401.
+simplement ignorée pour le cycle en cours (pas de crash).
+
+**Cas réel diagnostiqué (2026-09-15)** : Vinted a migré son frontend web de
+`www.vinted.fr/api/v2/catalog/items` vers `api.vinted.fr/svc-catalogue/items` sans préavis (endpoint
+interne non documenté, fragile par nature). L'ancien chemin répond désormais `404` pour toute
+requête, token valide ou non — indiscernable au premier abord d'un vrai blocage anti-bot
+(Cloudflare/DataDome, tous deux effectivement présents sur le domaine Vinted, mais PAS la cause
+ici). Schéma de réponse JSON inchangé, à une exception : `items[].url` est maintenant un chemin
+relatif (`/items/123-titre`) au lieu d'une URL absolue — `vinted.ts` le préfixe automatiquement.
 
 ### 3. Créer un webhook Discord
 
@@ -351,11 +366,12 @@ exposer tel quel sur Internet sans réflexion :
 ## Renouvellement automatique du token (vintedTokenRefresh.ts)
 
 En complément du renouvellement manuel (`.env` ou serveur d'admin ci-dessus),
-`vintedTokenRefresh.ts` renouvelle le token Vinted **tout seul**, toutes les 12h, par une
-simple visite HTTP anonyme sur `vinted.fr` — Vinted délivre un `access_token_web` valide à
-toute visite, sans compte (voir section "Vinted" ci-dessus). Pas de navigateur, pas
-d'identifiants : juste `fetch()` avec les en-têtes déjà utilisés pour les recherches
-(`vinted.ts`), qui récupère le cookie depuis les en-têtes `Set-Cookie` de la réponse.
+`vintedTokenRefresh.ts` renouvelle **tout seul**, toutes les 12h, les deux informations requises
+par les recherches Vinted (voir section "Vinted" ci-dessus) : le cookie `access_token_web` ET
+l'en-tête `X-Anon-Id`, tous deux obtenus par une simple visite HTTP anonyme sur `vinted.fr` — pas
+de navigateur, pas d'identifiants : juste `fetch()` avec les en-têtes déjà utilisés pour les
+recherches (`vinted.ts`), qui lit le cookie dans les en-têtes `Set-Cookie` de la réponse et
+l'anon-id dans son en-tête `x-anon-id`.
 
 Un login programmatique complet (Playwright + vrais identifiants) a été tenté puis abandonné
 (voir historique git) : totalement inutile, puisque la recherche elle-même ne requiert aucun
@@ -370,16 +386,18 @@ en cas d'échec (page bloquée, cookie absent de la réponse...), le token exist
 
 ## Limitations connues (V2)
 
-- Le cookie `access_token_web` de Vinted expire au bout de ~24h : un renouvellement automatique
-  tourne en tâche de fond (voir section dédiée ci-dessus), en plus du renouvellement manuel
-  (`.env` ou serveur d'admin). Mais même avec un token frais, les recherches Vinted peuvent être
-  bloquées par intermittence (403) : Vinted protège son endpoint de recherche interne
-  (`/api/v2/catalog/items`) avec **DataDome**, un service anti-bot dédié qui exige l'exécution
-  d'un script JS par un vrai navigateur avant d'accepter une requête — un simple `fetch()` HTTP
-  (ce que fait `vinted.ts`) ne peut techniquement jamais le satisfaire, quel que soit le token.
-  Aucun renouvellement de token ne résout ça : seul un retry au cycle suivant (voir
-  `isBlockedStatus`/retry dans `vinted.ts`) ou une réécriture pour passer les recherches
-  elles-mêmes par un vrai navigateur (non fait à ce jour) changerait ça.
+- Le cookie `access_token_web` de Vinted expire au bout de ~24h, et Vinted peut faire évoluer
+  sans préavis l'endpoint de recherche interne utilisé (déjà arrivé le 2026-09-15, voir section
+  "Vinted" ci-dessus) : un renouvellement automatique tourne en tâche de fond (voir section
+  dédiée ci-dessus), mais reste vulnérable à un futur changement de format côté Vinted (nouveaux
+  en-têtes requis, schéma JSON différent...) — pas de garantie de continuité au-delà de ce qui
+  est documenté aujourd'hui.
+- Le serveur qui héberge le bot doit avoir une réputation d'IP correcte auprès de Cloudflare
+  (qui protège `vinted.fr` en amont) : une IP de datacenter ayant servi longtemps à du trafic
+  automatisé peut se faire challenger systématiquement (cas réel rencontré et résolu en
+  réattribuant une nouvelle IP publique côté hébergeur — voir mémo de déploiement, non versionné
+  ici). Aucune protection côté code contre ça : c'est une question de réputation réseau, pas de
+  requête HTTP.
 - Les `itemId` sont propres à chaque marketplace et ne sont donc pas garantis uniques entre eBay
   et Vinted : `scheduler.ts` préfixe la clé (`ebay:...` / `vinted:...`) pour éviter toute collision
   dans le top 3 stocké.

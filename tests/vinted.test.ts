@@ -112,6 +112,49 @@ test("searchVinted - envoie bien la query dans le paramètre search_text (et rie
   });
 });
 
+test("searchVinted - envoie l'en-tête X-Anon-Id quand il est configuré", async () => {
+  await withMockedFetch([() => Response.json(searchFixture)], async (calls) => {
+    await searchVinted("Pokémon Nuit Noire", 50, 3, 5, null, "anon-id-de-test");
+
+    const headers = calls[0].init!.headers as Record<string, string>;
+    assert.equal(headers["X-Anon-Id"], "anon-id-de-test");
+  });
+});
+
+test("searchVinted - avertit quand aucun X-Anon-Id n'est disponible (requête probablement vouée à un 404)", async (t) => {
+  const warnSpy = t.mock.method(console, "warn", () => {});
+
+  await withMockedFetch([() => Response.json(searchFixture)], async (calls) => {
+    await searchVinted("Pokémon Nuit Noire", 50, 3, 5, null, null);
+
+    const headers = calls[0].init!.headers as Record<string, string>;
+    assert.equal(headers["X-Anon-Id"], undefined);
+    assert.ok(
+      warnSpy.mock.calls.some((c) => /aucun X-Anon-Id disponible/.test(String(c.arguments[0]))),
+      "doit avertir clairement de l'absence de X-Anon-Id"
+    );
+  });
+});
+
+test("searchVinted - convertit une URL d'annonce relative (nouveau format svc-catalogue) en URL absolue", async () => {
+  const relativeUrlFixture = {
+    items: [
+      {
+        id: 999,
+        title: "Carte Pokémon relative URL",
+        price: { amount: "5.00", currency_code: "EUR" },
+        url: "/items/999-carte-pokemon-relative-url",
+      },
+    ],
+  };
+
+  await withMockedFetch([() => Response.json(relativeUrlFixture)], async () => {
+    const items = await searchVinted("Pokémon relative", 50, 3, 5, null, "anon-id-de-test");
+
+    assert.equal(items[0].url, "https://www.vinted.fr/items/999-carte-pokemon-relative-url");
+  });
+});
+
 test("isRelevantToQuery - fixtures issues d'observations réelles (Vinted ne renvoie jamais un résultat vide)", () => {
   for (const { title, query, expected, note } of relevanceFixtures) {
     const got = isRelevantToQuery(title, query);
@@ -285,7 +328,7 @@ for (const blockedStatus of [403, 429]) {
       [() => new Response("blocked", { status: blockedStatus })],
       async (calls) => {
         await assert.rejects(
-          () => searchVinted("Dracaufeu ex", 50, 2, 5),
+          () => searchVinted("Dracaufeu ex", 50, 2, 5, null, "fake-anon-id"),
           new RegExp(`Vinted API a échoué: ${blockedStatus}`)
         );
 
@@ -331,7 +374,7 @@ test("searchVinted - envoie le cookie access_token_web quand il est configuré e
   const token = makeFakeJwt({ exp: Math.floor(Date.now() / 1000) + 3600 }); // expire dans 1h
 
   await withMockedFetch([() => Response.json(searchFixture)], async (calls) => {
-    await searchVinted("Dracaufeu ex", 50, 3, 5, token);
+    await searchVinted("Dracaufeu ex", 50, 3, 5, token, "fake-anon-id");
 
     const headers = calls[0].init!.headers as Record<string, string>;
     assert.equal(headers.Cookie, `access_token_web=${token}`);
@@ -346,7 +389,7 @@ test("searchVinted - avertit quand le cookie configuré est déjà expiré (dét
   await withMockedFetch([() => Response.json(searchFixture)], async (calls) => {
     // La requête part quand même (l'expiration décodée est une heuristique, pas une
     // certitude absolue) : Vinted reste la source de vérité via un éventuel 401.
-    await searchVinted("Dracaufeu ex", 50, 3, 5, token);
+    await searchVinted("Dracaufeu ex", 50, 3, 5, token, "fake-anon-id");
 
     assert.equal(calls.length, 1);
     assert.equal(warnSpy.mock.callCount(), 1);

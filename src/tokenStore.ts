@@ -14,3 +14,20 @@ export function getVintedAccessToken(): string | null {
 export function setVintedAccessToken(token: string): void {
   vintedAccessToken = token;
 }
+
+// Cas réel diagnostiqué (2026-09) : depuis la migration de Vinted vers son nouvel endpoint de
+// recherche (svc-catalogue, voir vinted.ts), une requête sans en-tête X-Anon-Id échoue -- sa
+// valeur est fournie par Vinted lui-même dans l'en-tête de réponse "x-anon-id" de toute visite
+// anonyme (voir vintedTokenRefresh.ts, qui la récupère en même temps que access_token_web). Pas
+// de valeur par défaut/`config` ici : contrairement au token, il n'y a pas de fallback manuel
+// via .env pour celui-ci (pas d'équivalent "cookie copié depuis DevTools" aussi pratique), donc
+// null tant que le renouvellement anonyme n'a pas tourné au moins une fois.
+let vintedAnonId: string | null = null;
+
+export function getVintedAnonId(): string | null {
+  return vintedAnonId;
+}
+
+export function setVintedAnonId(anonId: string): void {
+  vintedAnonId = anonId;
+}

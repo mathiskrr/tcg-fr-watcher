@@ -4,12 +4,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   extractCookieValue,
-  fetchAnonymousVintedToken,
+  fetchAnonymousVintedSession,
   renewVintedTokenAnonymously,
   startAnonymousTokenRenewal,
   stopAnonymousTokenRenewal,
 } from "../src/vintedTokenRefresh.js";
-import { getVintedAccessToken, setVintedAccessToken } from "../src/tokenStore.js";
+import { getVintedAccessToken, setVintedAccessToken, getVintedAnonId, setVintedAnonId } from "../src/tokenStore.js";
 
 // Même helper que tests/vinted.test.ts (non partagé -- ce fichier reste autonome, cohérent avec
 // le reste des tests réseau du dépôt qui ne mockent jamais fetch via un utilitaire commun).
@@ -36,9 +36,10 @@ function makeFakeJwt(payload: Record<string, unknown>): string {
   return `${header}.${body}.fake-signature`;
 }
 
-function responseWithSetCookies(setCookies: string[]): Response {
+function responseWithSetCookies(setCookies: string[], anonId?: string): Response {
   const headers = new Headers();
   for (const c of setCookies) headers.append("set-cookie", c);
+  if (anonId !== undefined) headers.set("x-anon-id", anonId);
   return new Response(null, { status: 200, headers });
 }
 
@@ -73,46 +74,71 @@ test("extractCookieValue - cookie absent renvoie null", () => {
   assert.equal(extractCookieValue([], "access_token_web"), null);
 });
 
-test("fetchAnonymousVintedToken - extrait le token depuis les en-têtes Set-Cookie de la réponse", async () => {
+test("fetchAnonymousVintedSession - extrait le token depuis les en-têtes Set-Cookie de la réponse", async () => {
   await withMockedFetch(
     [() => responseWithSetCookies(["anon_id=abc-123; Path=/", "access_token_web=frais-et-anonyme; Path=/; HttpOnly"])],
     async () => {
-      const token = await fetchAnonymousVintedToken();
-      assert.equal(token, "frais-et-anonyme");
+      const session = await fetchAnonymousVintedSession();
+      assert.equal(session.token, "frais-et-anonyme");
     }
   );
 });
 
-test("fetchAnonymousVintedToken - aucun cookie access_token_web dans la réponse -> null", async () => {
+test("fetchAnonymousVintedSession - aucun cookie access_token_web dans la réponse -> token null", async () => {
   await withMockedFetch([() => responseWithSetCookies(["anon_id=abc-123; Path=/"])], async () => {
-    const token = await fetchAnonymousVintedToken();
-    assert.equal(token, null);
+    const session = await fetchAnonymousVintedSession();
+    assert.equal(session.token, null);
   });
 });
 
-test("renewVintedTokenAnonymously - succès : met à jour le tokenStore et logge l'expiration décodée", async (t) => {
+test("fetchAnonymousVintedSession - extrait X-Anon-Id depuis l'en-tête de réponse", async () => {
+  await withMockedFetch(
+    [() => responseWithSetCookies(["access_token_web=peu-importe; Path=/"], "anon-id-frais")],
+    async () => {
+      const session = await fetchAnonymousVintedSession();
+      assert.equal(session.anonId, "anon-id-frais");
+    }
+  );
+});
+
+test("fetchAnonymousVintedSession - aucun en-tête x-anon-id dans la réponse -> anonId null", async () => {
+  await withMockedFetch([() => responseWithSetCookies(["access_token_web=peu-importe; Path=/"])], async () => {
+    const session = await fetchAnonymousVintedSession();
+    assert.equal(session.anonId, null);
+  });
+});
+
+test("renewVintedTokenAnonymously - succès : met à jour le tokenStore (token + anonId) et logge l'expiration décodée", async (t) => {
   const logSpy = t.mock.method(console, "log", () => {});
   const expSeconds = Math.floor(Date.now() / 1000) + 3600;
   const fakeJwt = makeFakeJwt({ exp: expSeconds });
 
-  await withMockedFetch([() => responseWithSetCookies([`access_token_web=${fakeJwt}; Path=/; HttpOnly`])], async () => {
-    await renewVintedTokenAnonymously();
-  });
+  await withMockedFetch(
+    [() => responseWithSetCookies([`access_token_web=${fakeJwt}; Path=/; HttpOnly`], "anon-id-du-cycle")],
+    async () => {
+      await renewVintedTokenAnonymously();
+    }
+  );
 
   assert.equal(getVintedAccessToken(), fakeJwt);
+  assert.equal(getVintedAnonId(), "anon-id-du-cycle");
   assert.ok(
     logSpy.mock.calls.some((c) => /token Vinted renouvelé anonymement/.test(String(c.arguments[0]))),
-    "doit logger le succès du renouvellement"
+    "doit logger le succès du renouvellement du token"
+  );
+  assert.ok(
+    logSpy.mock.calls.some((c) => /X-Anon-Id renouvelé anonymement/.test(String(c.arguments[0]))),
+    "doit logger le succès du renouvellement de X-Anon-Id"
   );
   const successLog = String(logSpy.mock.calls.find((c) => /token Vinted renouvelé anonymement/.test(String(c.arguments[0])))?.arguments[0]);
   assert.doesNotMatch(successLog, new RegExp(fakeJwt.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), "ne doit jamais logger le token lui-même");
 });
 
-test("renewVintedTokenAnonymously - aucun cookie reçu : avertit clairement, ne touche pas au tokenStore", async (t) => {
+test("renewVintedTokenAnonymously - aucun cookie reçu : avertit clairement, ne touche pas au token existant", async (t) => {
   const warnSpy = t.mock.method(console, "warn", () => {});
   setVintedAccessToken("token-avant");
 
-  await withMockedFetch([() => responseWithSetCookies(["anon_id=abc-123; Path=/"])], async () => {
+  await withMockedFetch([() => responseWithSetCookies([], "anon-id-quand-meme")], async () => {
     await renewVintedTokenAnonymously();
   });
 
@@ -120,6 +146,21 @@ test("renewVintedTokenAnonymously - aucun cookie reçu : avertit clairement, ne 
   assert.ok(
     warnSpy.mock.calls.some((c) => /aucun cookie access_token_web reçu/.test(String(c.arguments[0]))),
     "doit avertir clairement de l'absence de cookie"
+  );
+});
+
+test("renewVintedTokenAnonymously - aucun X-Anon-Id reçu : avertit clairement, ne touche pas à l'anonId existant", async (t) => {
+  const warnSpy = t.mock.method(console, "warn", () => {});
+  setVintedAnonId("anon-id-avant");
+
+  await withMockedFetch([() => responseWithSetCookies(["access_token_web=peu-importe; Path=/"])], async () => {
+    await renewVintedTokenAnonymously();
+  });
+
+  assert.equal(getVintedAnonId(), "anon-id-avant", "l'anonId existant ne doit pas être écrasé par un renouvellement raté");
+  assert.ok(
+    warnSpy.mock.calls.some((c) => /aucun en-tête x-anon-id reçu/.test(String(c.arguments[0]))),
+    "doit avertir clairement de l'absence de X-Anon-Id"
   );
 });
 

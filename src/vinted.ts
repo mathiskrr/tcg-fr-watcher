@@ -1,16 +1,23 @@
 import { fetchWithRetry } from "./http.js";
-import { getVintedAccessToken } from "./tokenStore.js";
+import { getVintedAccessToken, getVintedAnonId } from "./tokenStore.js";
 import type { MarketplaceItem } from "./types.js";
 
 export type VintedItem = MarketplaceItem;
 
 // Vinted n'a pas d'API publique documentée : on appelle ici l'endpoint interne utilisé
-// par leur propre frontend web (catalog/items). Fragile par nature (peut changer sans
-// préavis) et potentiellement bloqué (403/429) si le trafic est jugé automatisé -> voir
-// isBlockedStatus / le retry dédié plus bas. Nécessite en pratique un cookie de session
-// valide (access_token_web), sans quoi l'API répond 401 même avec des en-têtes
-// navigateur réalistes -> voir renderRenewalInstructions ci-dessous.
-const SEARCH_URL = "https://www.vinted.fr/api/v2/catalog/items";
+// par leur propre frontend web. Fragile par nature (peut changer sans préavis) et
+// potentiellement bloqué (403/429) si le trafic est jugé automatisé -> voir isBlockedStatus /
+// le retry dédié plus bas. Nécessite en pratique un cookie de session valide
+// (access_token_web) ET l'en-tête X-Anon-Id (voir BROWSER_HEADERS/searchVinted plus bas),
+// sans quoi l'API répond respectivement 401/404 -> voir renderRenewalInstructions ci-dessous.
+//
+// Cas réel diagnostiqué (migration constatée le 2026-09-15, voir historique git) : l'ancien
+// chemin "www.vinted.fr/api/v2/catalog/items" renvoie désormais 404 (la page HTML "not found"
+// de Vinted, pas un blocage anti-bot) pour TOUTE requête, token valide ou non -- Vinted a migré
+// son frontend web vers ce nouveau service. Schéma de réponse JSON inchangé (items[].title/
+// price/url/photo), à une exception près : items[].url est maintenant un chemin RELATIF
+// ("/items/123-titre") au lieu d'une URL absolue -> voir absoluteItemUrl plus bas.
+const SEARCH_URL = "https://api.vinted.fr/svc-catalogue/items";
 
 // En-têtes imitant un navigateur classique. Ça n'annule pas une éventuelle protection
 // anti-bot côté Vinted, mais évite les rejets triviaux liés à l'absence de User-Agent / Referer.
@@ -221,23 +228,35 @@ interface VintedApiResponse {
   }>;
 }
 
-// retries/delayMsBase/accessTokenWeb exposés (au lieu d'être en dur) pour permettre des
+// Vu depuis la migration (voir commentaire sur SEARCH_URL) : sans X-Anon-Id, l'API répond 404
+// -- ni 401 ni 403, donc indiscernable d'un endpoint qui n'existe plus sans ce message explicite.
+const MISSING_ANON_ID_WARNING =
+  "[vinted] aucun X-Anon-Id disponible (renouvellement anonyme du token pas encore passé, voir vintedTokenRefresh.ts) -- la requête va probablement échouer en 404";
+
+// retries/delayMsBase/accessTokenWeb/anonId exposés (au lieu d'être en dur) pour permettre des
 // tests rapides et déterministes sans dépendre de tokenStore.ts ni du vrai backoff.
-// accessTokenWeb retombe sur tokenStore.ts (pas directement config.ts) : le token peut être
-// renouvelé à chaud via POST /token (voir server.ts) sans redémarrer le process, alors que
-// config.vintedAccessTokenWeb ne reflète que la valeur lue dans .env au démarrage.
+// accessTokenWeb/anonId retombent sur tokenStore.ts (pas directement config.ts) : tous deux
+// peuvent être renouvelés à chaud (voir server.ts / vintedTokenRefresh.ts) sans redémarrer le
+// process.
 export async function searchVinted(
   query: string,
   limit = 50,
   retries = 3,
   delayMsBase = 1500,
-  accessTokenWeb: string | null = getVintedAccessToken()
+  accessTokenWeb: string | null = getVintedAccessToken(),
+  anonId: string | null = getVintedAnonId()
 ): Promise<VintedItem[]> {
   const headers: Record<string, string> = { ...BROWSER_HEADERS };
 
   if (accessTokenWeb) {
     warnIfAccessTokenLooksExpired(accessTokenWeb);
     headers.Cookie = `access_token_web=${accessTokenWeb}`;
+  }
+
+  if (anonId) {
+    headers["X-Anon-Id"] = anonId;
+  } else {
+    console.warn(MISSING_ANON_ID_WARNING);
   }
 
   // IMPORTANT: pas de catalog_ids ici. Un id de catégorie "Cartes à collectionner" a été
@@ -280,7 +299,17 @@ export async function searchVinted(
       title: item.title,
       price: Number(item.price!.amount),
       currency: item.price!.currency_code,
-      url: item.url ?? `https://www.vinted.fr/items/${item.id}`,
+      url: absoluteItemUrl(item.url, item.id),
       imageUrl: item.photo?.url ?? null,
     }));
+}
+
+// Depuis la migration vers svc-catalogue (voir commentaire sur SEARCH_URL), items[].url est un
+// chemin relatif ("/items/123-titre") au lieu d'une URL absolue -> le lien posté sur Discord
+// serait autrement cassé (relatif à rien). Le préfixe n'est ajouté que si besoin : reste
+// compatible si Vinted redevient un jour absolu, ou si un fallback (absent d'items[].url)
+// fournit déjà une URL absolue.
+function absoluteItemUrl(url: string | undefined, itemId: number): string {
+  if (!url) return `https://www.vinted.fr/items/${itemId}`;
+  return url.startsWith("/") ? `https://www.vinted.fr${url}` : url;
 }
