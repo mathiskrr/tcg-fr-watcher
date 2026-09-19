@@ -255,6 +255,7 @@ plus bas) :
   | `Futuriste Rare` (rareté du set 30C, encore plus rare que SIR) | magenta | 🛸 |
   | `Gold`                        | doré          | 🌟    |
   | `SIR`                         | violet        | 🌟    |
+  | `CC` (Collection Classique, reprints à cadre doré du set 30C) | bronze | 📜    |
   | `AR` / `UR`                   | bleu          | ✨    |
   | produit scellé (`isSealedProductEntry`) | gris | 📦    |
   | rien de tout ça (carte standard) | gris       | (aucun) |

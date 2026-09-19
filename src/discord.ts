@@ -29,16 +29,20 @@ async function waitForRateLimit(minIntervalMs: number): Promise<void> {
 // Couleur + emoji selon la rareté détectable dans le nom de l'entrée watchlist. Vérifiés
 // dans cet ordre : Futuriste Rare (nouvelle rareté du set 30C, encore plus rare que SIR — voir
 // watchlist.json "Mewtwo-ex 157/128 (Futuriste Rare)", seulement 2 cartes du set l'ont) en
-// premier, puis Gold/SIR (haut de gamme), avant AR/UR, avant le générique "scellé".
+// premier, puis Gold/SIR (haut de gamme), puis Collection Classique (reprints à cadre doré du
+// set 30C, ex: "Pikachu 58/102 (CC)" — une catégorie à part, pas une rareté de puissance),
+// avant AR/UR, avant le générique "scellé".
 const COLOR_FUTURISTIC = 0xff00aa;
 const COLOR_GOLD = 0xf1c40f;
 const COLOR_PURPLE = 0x9b59b6;
+const COLOR_BRONZE = 0xcd7f32;
 const COLOR_BLUE = 0x3498db;
 const COLOR_GREY = 0x95a5a6;
 
 const FUTURISTIC_PATTERN = /futuriste/i;
 const GOLD_PATTERN = /\bgold\b/i;
 const SIR_PATTERN = /\bsir\b/i;
+const CLASSIC_COLLECTION_PATTERN = /\bcc\b/i;
 const AR_OR_UR_PATTERN = /\b(ar|ur)\b/i;
 
 interface RarityStyle {
@@ -52,6 +56,9 @@ function detectRarityStyle(entryName: string): RarityStyle {
   }
   if (GOLD_PATTERN.test(entryName) || SIR_PATTERN.test(entryName)) {
     return { color: GOLD_PATTERN.test(entryName) ? COLOR_GOLD : COLOR_PURPLE, emojiPrefix: "🌟 " };
+  }
+  if (CLASSIC_COLLECTION_PATTERN.test(entryName)) {
+    return { color: COLOR_BRONZE, emojiPrefix: "📜 " };
   }
   if (AR_OR_UR_PATTERN.test(entryName)) {
     return { color: COLOR_BLUE, emojiPrefix: "✨ " };

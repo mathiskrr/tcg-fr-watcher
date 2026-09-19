@@ -113,6 +113,8 @@ test("sendNewListingAlert - couleur et emoji selon la rareté détectée dans le
     { entryName: "Mewtwo-ex 157/128 (Futuriste Rare)", expectedEmoji: "🛸", expectedColor: 0xff00aa },
     { entryName: "Méga-Darkrai-ex 120/084 (Gold)", expectedEmoji: "🌟", expectedColor: 0xf1c40f },
     { entryName: "Méga-Darkrai-ex 116/084 (SIR)", expectedEmoji: "🌟", expectedColor: 0x9b59b6 },
+    { entryName: "Pikachu 58/102 (CC)", expectedEmoji: "📜", expectedColor: 0xcd7f32 },
+    { entryName: "Raikou 050/185 (CC - Amazing Rare)", expectedEmoji: "📜", expectedColor: 0xcd7f32 },
     { entryName: "Mimantis 085/084 (AR)", expectedEmoji: "✨", expectedColor: 0x3498db },
     { entryName: "Floramantis-ex 096/084 (UR)", expectedEmoji: "✨", expectedColor: 0x3498db },
     { entryName: "Display Nuit Noire (36 boosters)", expectedEmoji: "📦", expectedColor: 0x95a5a6 },
