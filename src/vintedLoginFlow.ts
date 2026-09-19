@@ -171,6 +171,33 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Motifs observés sur les pages de challenge Cloudflare ("Just a moment...", "Please wait...
+// Enable JavaScript and cookies to continue", bannière "Attention Required!"...) -- permet de
+// distinguer en un coup d'oeil dans les logs prod un vrai blocage anti-bot d'un simple
+// changement de sélecteur côté Vinted (les deux se terminent en "timeout" sur EMAIL_SELECTOR,
+// mais n'appellent pas du tout le même correctif).
+const CLOUDFLARE_CHALLENGE_PATTERN = /just a moment|enable javascript and cookies|checking your browser|cf-chl|attention required/i;
+
+// Best-effort, appelé uniquement pour enrichir les logs au moment d'un échec -- ne doit jamais
+// faire échouer le classement de l'erreur d'origine (voir classifyStepError, appelé juste après
+// dans tous les cas d'usage).
+async function logPageDiagnosticsOnFailure(page: LoginPage, stepDescription: string): Promise<void> {
+  try {
+    const html = await page.content();
+    const isCloudflareChallenge = CLOUDFLARE_CHALLENGE_PATTERN.test(html);
+    const snippet = html.replace(/\s+/g, " ").trim().slice(0, 300);
+    console.error(
+      `[vintedLoginFlow] diagnostic après échec "${stepDescription}" -- ${
+        isCloudflareChallenge
+          ? "page de challenge Cloudflare détectée (voir README/mémo : renouvellement manuel nécessaire, le headless ne peut pas la résoudre)"
+          : "page inattendue (pas de motif Cloudflare connu, peut-être un sélecteur Vinted changé)"
+      } : ${snippet}`
+    );
+  } catch {
+    // Rien à faire : le classement de l'erreur d'origine se poursuit sans ce diagnostic.
+  }
+}
+
 // Traduit une erreur survenue à une étape précise en LoginOutcome, en loggant PRÉCISÉMENT
 // quelle étape (et, le cas échéant, quel sélecteur) a échoué -- avant, un seul try/catch
 // global autour de tout le parcours ne permettait pas de savoir si "timeout" venait de la
@@ -243,6 +270,7 @@ export async function performVintedLogin(
   try {
     await page.waitForSelector(EMAIL_SELECTOR, { timeout: formTimeoutMs });
   } catch (err) {
+    await logPageDiagnosticsOnFailure(page, `attente du champ email (sélecteur: ${EMAIL_SELECTOR})`);
     return classifyStepError(`attente du champ email (sélecteur: ${EMAIL_SELECTOR})`, err);
   }
 
