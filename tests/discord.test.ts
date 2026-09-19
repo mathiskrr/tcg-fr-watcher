@@ -115,7 +115,7 @@ test("sendNewListingAlert - utilise cardmarketUrl tel quel quand renseigné (pri
       const cardmarketField = calls[0].body.embeds[0].fields[2];
       assert.equal(
         cardmarketField.value,
-        "[🔍 Cardmarket](https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Mega-Chandelure-ex-V3-PBL115)"
+        "[🔍 Cardmarket](https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Mega-Chandelure-ex-V3-PBL115?sellerCountry=12)"
       );
     }
   );
@@ -134,6 +134,7 @@ test("sendNewListingAlert - le lien Cardmarket retire le suffixe de rareté entr
       const cardmarketField = calls[0].body.embeds[0].fields[2];
       const cardmarketUrl = new URL(cardmarketField.value.match(/\((.+)\)$/)[1]);
       assert.equal(cardmarketUrl.searchParams.get("searchString"), "Méga-Darkrai-ex");
+      assert.equal(cardmarketUrl.searchParams.get("sellerCountry"), "12", "doit filtrer sur les vendeurs localisés en France");
     }
   );
 });

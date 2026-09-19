@@ -279,6 +279,11 @@ plus bas) :
     produits par numéro dans le champ "Nom", cas réel diagnostiqué : "Zacian V 138/202" renvoie
     "Aucun résultat", "Zacian V" seul trouve le produit). Peut lister plusieurs
     variantes/éditions à trier soi-même.
+
+  Dans les deux cas, `sellerCountry=12` (France, voir doc officielle de l'API Cardmarket) est
+  ajouté à l'URL : la page s'ouvre déjà filtrée sur les vendeurs localisés en France (frais de
+  port/délais plus avantageux pour un acheteur en France) — l'utilisateur peut toujours
+  décocher ce filtre lui-même sur la page si besoin.
 - **Footer** : nom du `set` de l'entrée, combiné au `timestamp` natif de l'embed (Discord
   affiche l'heure d'envoi automatiquement, pas besoin de la formater à la main).
 

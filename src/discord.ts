@@ -103,7 +103,20 @@ function cardmarketSearchUrl(entryName: string): string {
     .trim();
   const url = new URL("https://www.cardmarket.com/fr/Pokemon/Products/Search");
   url.searchParams.set("searchString", query);
-  return url.toString();
+  return withFranceSellerFilter(url.toString());
+}
+
+// ID de pays Cardmarket pour la France (voir documentation officielle de l'API Cardmarket,
+// paramètre sellerCountry) -- ne restreint QUE l'affichage par défaut de la page (l'utilisateur
+// peut toujours l'élargir à d'autres pays lui-même), mais évite d'avoir à le faire à chaque
+// clic : les frais de port et délais depuis la France sont presque toujours les plus
+// avantageux pour un acheteur en France.
+const CARDMARKET_FRANCE_SELLER_COUNTRY_ID = "12";
+
+function withFranceSellerFilter(url: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set("sellerCountry", CARDMARKET_FRANCE_SELLER_COUNTRY_ID);
+  return parsed.toString();
 }
 
 function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
@@ -126,7 +139,9 @@ function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
       // variantes/éditions du même nom, voir cas réel diagnostiqué).
       {
         name: "Comparer",
-        value: `[🔍 Cardmarket](${entry.cardmarketUrl || cardmarketSearchUrl(entry.name)})`,
+        value: `[🔍 Cardmarket](${
+          entry.cardmarketUrl ? withFranceSellerFilter(entry.cardmarketUrl) : cardmarketSearchUrl(entry.name)
+        })`,
         inline: true,
       },
     ],
