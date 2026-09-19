@@ -82,12 +82,21 @@ function cleanTitle(title: string): string {
 // et parfois trompeur (ex: chercher "(CC)" littéralement).
 const TRAILING_PAREN_SUFFIX_PATTERN = /\s*\([^)]*\)\s*$/;
 
+// Cas réel diagnostiqué : Cardmarket ne référence PAS ses produits avec le numéro de carte
+// dans le champ "Nom" (contrairement aux titres d'annonces Vinted/eBay) -- une recherche
+// "Zacian V 138/202" renvoie "Aucun résultat", alors que "Zacian V" seul trouve le produit.
+// Retire donc aussi le numéro ("NNN/NNN", zéros de tête inclus) du terme de recherche.
+const CARD_NUMBER_PATTERN = /\s*\b\d{1,4}\/\d{1,4}\b\s*/;
+
 // Pas d'API Cardmarket utilisée ici (réservée aux vendeurs professionnels, voir discussion) --
 // simple lien de recherche vers leur propre site, que l'utilisateur ouvre lui-même dans son
 // navigateur pour comparer manuellement. Gratuit, aucune clé/quota, mais pas de prix récupéré
 // automatiquement : juste un raccourci vers une recherche pré-remplie.
 function cardmarketSearchUrl(entryName: string): string {
-  const query = entryName.replace(TRAILING_PAREN_SUFFIX_PATTERN, "").trim();
+  const query = entryName
+    .replace(TRAILING_PAREN_SUFFIX_PATTERN, "")
+    .replace(CARD_NUMBER_PATTERN, " ")
+    .trim();
   const url = new URL("https://www.cardmarket.com/fr/Pokemon/Products/Search");
   url.searchParams.set("searchString", query);
   return url.toString();

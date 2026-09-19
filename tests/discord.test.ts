@@ -101,7 +101,10 @@ test("sendNewListingAlert - retire le '(FR)' redondant en fin de titre", async (
   );
 });
 
-test("sendNewListingAlert - le lien Cardmarket retire le suffixe de rareté entre parenthèses du nom de l'entrée", async () => {
+test("sendNewListingAlert - le lien Cardmarket retire le suffixe de rareté entre parenthèses ET le numéro de carte du nom de l'entrée", async () => {
+  // Cas réel diagnostiqué : Cardmarket ne référence pas ses produits par numéro de carte dans
+  // le nom -- une recherche "Méga-Darkrai-ex 116/084" renvoie "Aucun résultat", contrairement à
+  // "Méga-Darkrai-ex" seul.
   await withMockedFetch(
     () => Response.json({ id: "9999999999999999999" }),
     async (calls) => {
@@ -110,7 +113,7 @@ test("sendNewListingAlert - le lien Cardmarket retire le suffixe de rareté entr
 
       const cardmarketField = calls[0].body.embeds[0].fields[2];
       const cardmarketUrl = new URL(cardmarketField.value.match(/\((.+)\)$/)[1]);
-      assert.equal(cardmarketUrl.searchParams.get("searchString"), "Méga-Darkrai-ex 116/084");
+      assert.equal(cardmarketUrl.searchParams.get("searchString"), "Méga-Darkrai-ex");
     }
   );
 });

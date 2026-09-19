@@ -266,8 +266,10 @@ plus bas) :
   Discord ne peut afficher que du texte brut (jamais de lien cliquable), d'où ce champ dédié
   plutôt qu'un footer du type `item {id}`.
 - **Champ `Comparer`** : lien Markdown cliquable `[🔍 Cardmarket](url)` vers une recherche
-  Cardmarket pré-remplie avec le nom de la carte (suffixe de rareté entre parenthèses retiré,
-  ex: "(SIR)"/"(CC)" — pas pertinent comme terme de recherche). **Pas de prix Cardmarket
+  Cardmarket pré-remplie avec le nom de la carte, suffixe de rareté entre parenthèses (ex:
+  "(SIR)"/"(CC)") ET numéro de carte ("138/202") retirés — Cardmarket ne référence pas ses
+  produits par numéro dans le champ "Nom" (cas réel diagnostiqué : "Zacian V 138/202" renvoie
+  "Aucun résultat", "Zacian V" seul trouve le produit). **Pas de prix Cardmarket
   récupéré automatiquement** : l'API officielle Cardmarket est réservée aux vendeurs
   professionnels, et les alternatives tierces qui exposent les prix (filtrables par langue)
   sont payantes (~50$/mois minimum) — jugé disproportionné pour ce projet. Ce lien reste donc
