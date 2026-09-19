@@ -14,7 +14,9 @@ const SEARCH_URL = "https://www.vinted.fr/api/v2/catalog/items";
 
 // En-têtes imitant un navigateur classique. Ça n'annule pas une éventuelle protection
 // anti-bot côté Vinted, mais évite les rejets triviaux liés à l'absence de User-Agent / Referer.
-const BROWSER_HEADERS = {
+// Exporté : réutilisé tel quel par vintedTokenRefresh.ts pour la visite anonyme qui récupère un
+// access_token_web frais (même empreinte HTTP, pas de raison de diverger).
+export const BROWSER_HEADERS = {
   "User-Agent":
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
   Accept: "application/json, text/plain, */*",

@@ -149,6 +149,7 @@ src/
   http.ts       # fetch avec retry (backoff linéaire, prédicat de statut retryable configurable)
   tokenStore.ts # token Vinted en mémoire, modifiable à chaud (voir server.ts) sans redémarrage
   server.ts     # serveur HTTP admin (POST /token, GET /status) pour renouveler le token à distance
+  vintedTokenRefresh.ts # renouvellement anonyme du token Vinted (visite publique périodique, sans identifiants ni navigateur)
   scheduler.ts  # orchestration : cron + logique du cycle de vérification (multi-source)
   index.ts      # entrypoint
 tests/
@@ -159,6 +160,7 @@ tests/
   vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
   scheduler.test.ts          # selectCheapestN, diffAlertedItems, vintedQueries, dedupeByItemId (fonctions pures)
   server.test.ts             # POST /token, GET /status : auth (accepté/refusé), jamais le secret/token dans les logs
+  vintedTokenRefresh.test.ts # extractCookieValue, fetchAnonymousVintedToken et renewVintedTokenAnonymously, fetch mocké
   fixtures/*.json            # jeux de données des tests
 ```
 
@@ -346,22 +348,38 @@ exposer tel quel sur Internet sans réflexion :
    - Sans l'un ou l'autre, le secret circule en clair : acceptable pour un test rapide, pas
      pour un usage durable exposé sur Internet.
 
+## Renouvellement automatique du token (vintedTokenRefresh.ts)
+
+En complément du renouvellement manuel (`.env` ou serveur d'admin ci-dessus),
+`vintedTokenRefresh.ts` renouvelle le token Vinted **tout seul**, toutes les 12h, par une
+simple visite HTTP anonyme sur `vinted.fr` — Vinted délivre un `access_token_web` valide à
+toute visite, sans compte (voir section "Vinted" ci-dessus). Pas de navigateur, pas
+d'identifiants : juste `fetch()` avec les en-têtes déjà utilisés pour les recherches
+(`vinted.ts`), qui récupère le cookie depuis les en-têtes `Set-Cookie` de la réponse.
+
+Un login programmatique complet (Playwright + vrais identifiants) a été tenté puis abandonné
+(voir historique git) : totalement inutile, puisque la recherche elle-même ne requiert aucun
+compte, et se heurtait en prime à un widget Cloudflare Turnstile sur la page de login — jamais
+résolu.
+
+**Actif par défaut**, sans configuration : contrairement à l'ancien mécanisme par login, celui-ci
+ne demande aucune variable d'environnement (pas d'identifiants à exposer). Toujours best-effort :
+en cas d'échec (page bloquée, cookie absent de la réponse...), le token existant n'est jamais
+écrasé et le bot logge un avertissement clair, sans jamais planter — le renouvellement manuel
+(`.env` ou `POST /token`) reste disponible en secours à tout moment.
+
 ## Limitations connues (V2)
 
-- Le cookie `access_token_web` de Vinted expire au bout de quelques heures : sans
-  renouvellement régulier, les requêtes Vinted finissent par échouer en 401 (détecté et loggé
-  clairement, voir section "Vinted" ci-dessus). Renouvellement **manuel uniquement**
-  (`.env` ou serveur d'admin `POST /token` ci-dessus) : une visite anonyme sur vinted.fr suffit
-  à obtenir un `access_token_web` frais (aucun compte Vinted requis, voir section "Vinted"), pas
-  besoin de se connecter avec de vrais identifiants — un login programmatique automatisé a été
-  tenté puis abandonné (voir historique git) : Vinted protège son endpoint de recherche interne
+- Le cookie `access_token_web` de Vinted expire au bout de ~24h : un renouvellement automatique
+  tourne en tâche de fond (voir section dédiée ci-dessus), en plus du renouvellement manuel
+  (`.env` ou serveur d'admin). Mais même avec un token frais, les recherches Vinted peuvent être
+  bloquées par intermittence (403) : Vinted protège son endpoint de recherche interne
   (`/api/v2/catalog/items`) avec **DataDome**, un service anti-bot dédié qui exige l'exécution
   d'un script JS par un vrai navigateur avant d'accepter une requête — un simple `fetch()` HTTP
-  (ce que fait `vinted.ts`) ne peut techniquement jamais le satisfaire, token valide ou non. En
-  pratique, ça se traduit par des blocages intermittents (403) qu'aucun renouvellement de token
-  ne résout : seul un retry au cycle suivant (voir `isBlockedStatus`/retry dans `vinted.ts`) ou
-  une réécriture pour passer par un vrai navigateur (Playwright, non fait à ce jour) changerait
-  ça.
+  (ce que fait `vinted.ts`) ne peut techniquement jamais le satisfaire, quel que soit le token.
+  Aucun renouvellement de token ne résout ça : seul un retry au cycle suivant (voir
+  `isBlockedStatus`/retry dans `vinted.ts`) ou une réécriture pour passer les recherches
+  elles-mêmes par un vrai navigateur (non fait à ce jour) changerait ça.
 - Les `itemId` sont propres à chaque marketplace et ne sont donc pas garantis uniques entre eBay
   et Vinted : `scheduler.ts` préfixe la clé (`ebay:...` / `vinted:...`) pour éviter toute collision
   dans le top 3 stocké.
