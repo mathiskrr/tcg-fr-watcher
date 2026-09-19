@@ -9,6 +9,10 @@ import type { MarketplaceItem } from "./types.js";
 export interface AlertContext {
   name: string;
   set: string;
+  // URL exacte de la fiche produit Cardmarket (renseignée à la main dans watchlist.json, une
+  // recherche par nom ne peut pas la deviner fiablement -- voir cardmarketSearchUrl). Optionnelle
+  // : absente/null -> repli sur une recherche Cardmarket générique par nom.
+  cardmarketUrl?: string | null;
 }
 
 // Espace les envois vers le webhook Discord pour rester sous sa limite de taux (~5
@@ -116,8 +120,15 @@ function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
       // la place, en markdown, pour rester réellement cliquable.
       { name: "Annonce", value: `[🔗 Voir l'annonce](${item.url})`, inline: true },
       // Pas de prix Cardmarket automatique (voir cardmarketSearchUrl) : juste un raccourci pour
-      // comparer manuellement en un clic.
-      { name: "Comparer", value: `[🔍 Cardmarket](${cardmarketSearchUrl(entry.name)})`, inline: true },
+      // comparer manuellement en un clic. cardmarketUrl (renseigné à la main dans
+      // watchlist.json) pointe directement sur la bonne fiche produit quand disponible ;
+      // repli sur une recherche générique par nom sinon (moins précis : peut lister plusieurs
+      // variantes/éditions du même nom, voir cas réel diagnostiqué).
+      {
+        name: "Comparer",
+        value: `[🔍 Cardmarket](${entry.cardmarketUrl || cardmarketSearchUrl(entry.name)})`,
+        inline: true,
+      },
     ],
     // `timestamp` (ISO8601) est un champ natif de l'embed Discord : combiné au footer, il
     // affiche "<set> • à l'instant" (ou l'heure exacte) sans avoir à le formater nous-mêmes.

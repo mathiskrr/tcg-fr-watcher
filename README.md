@@ -119,7 +119,8 @@ relatif (`/items/123-titre`) au lieu d'une URL absolue — `vinted.ts` le préfi
                                             // "Embed Discord" ci-dessous
   "set": "ME05 - Nuit Noire",              // affiché dans le footer de l'embed Discord
   "ebayQuery": "Mega Darkrai ex 116/084 Nuit Noire carte française", // requête envoyée à eBay
-  "vintedQuery": "Mega Darkrai ex 116/084 Nuit Noire" // requête envoyée à Vinted (optionnel, retombe sur ebayQuery si absent/null)
+  "vintedQuery": "Mega Darkrai ex 116/084 Nuit Noire", // requête envoyée à Vinted (optionnel, retombe sur ebayQuery si absent/null)
+  "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/..." // lien direct vers la fiche produit Cardmarket (optionnel, à renseigner à la main -- voir "Embed Discord" ; repli sur une recherche générique par nom si absent)
 }
 ```
 
@@ -265,15 +266,19 @@ plus bas) :
 - **Champ `Annonce`** : lien Markdown cliquable `[🔗 Voir l'annonce](url)` — un footer
   Discord ne peut afficher que du texte brut (jamais de lien cliquable), d'où ce champ dédié
   plutôt qu'un footer du type `item {id}`.
-- **Champ `Comparer`** : lien Markdown cliquable `[🔍 Cardmarket](url)` vers une recherche
-  Cardmarket pré-remplie avec le nom de la carte, suffixe de rareté entre parenthèses (ex:
-  "(SIR)"/"(CC)") ET numéro de carte ("138/202") retirés — Cardmarket ne référence pas ses
-  produits par numéro dans le champ "Nom" (cas réel diagnostiqué : "Zacian V 138/202" renvoie
-  "Aucun résultat", "Zacian V" seul trouve le produit). **Pas de prix Cardmarket
-  récupéré automatiquement** : l'API officielle Cardmarket est réservée aux vendeurs
-  professionnels, et les alternatives tierces qui exposent les prix (filtrables par langue)
-  sont payantes (~50$/mois minimum) — jugé disproportionné pour ce projet. Ce lien reste donc
-  un simple raccourci pour comparer manuellement en un clic, pas une comparaison automatique.
+- **Champ `Comparer`** : lien Markdown cliquable `[🔍 Cardmarket](url)`. **Pas de prix
+  Cardmarket récupéré automatiquement** : l'API officielle Cardmarket est réservée aux
+  vendeurs professionnels, et les alternatives tierces qui exposent les prix (filtrables par
+  langue) sont payantes (~50$/mois minimum) — jugé disproportionné pour ce projet. Deux cas :
+  - `cardmarketUrl` renseigné dans l'entrée watchlist (voir "Remplir la watchlist" plus haut) :
+    utilisé tel quel, lien direct vers la bonne fiche produit (précis, mais à trouver et coller
+    à la main — Cardmarket indexe chaque variante/rareté/édition comme un produit séparé,
+    aucun moyen fiable de deviner la bonne URL depuis juste le nom+numéro de la carte).
+  - Absent : repli sur une recherche Cardmarket générique, nom de la carte seul (suffixe de
+    rareté entre parenthèses ET numéro de carte retirés — Cardmarket ne référence pas ses
+    produits par numéro dans le champ "Nom", cas réel diagnostiqué : "Zacian V 138/202" renvoie
+    "Aucun résultat", "Zacian V" seul trouve le produit). Peut lister plusieurs
+    variantes/éditions à trier soi-même.
 - **Footer** : nom du `set` de l'entrée, combiné au `timestamp` natif de l'embed (Discord
   affiche l'heure d'envoi automatiquement, pas besoin de la formater à la main).
 

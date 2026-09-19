@@ -19,6 +19,9 @@ export interface WatchlistEntry {
   // isRelevantToQuery / fetchVintedItems) -> chaque variante est interrogée séparément puis
   // les résultats sont fusionnés (dédupliqués par itemId).
   vintedQuery?: string | string[] | null;
+  // URL exacte de la fiche produit Cardmarket, renseignée à la main (voir discord.ts
+  // AlertContext.cardmarketUrl) -- optionnelle, repli sur une recherche générique si absente.
+  cardmarketUrl?: string | null;
 }
 
 // Chaque cycle recalcule intégralement les TOP_N_PER_ENTRY annonces FR les moins chères

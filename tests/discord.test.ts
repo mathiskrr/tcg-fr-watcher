@@ -101,6 +101,26 @@ test("sendNewListingAlert - retire le '(FR)' redondant en fin de titre", async (
   );
 });
 
+test("sendNewListingAlert - utilise cardmarketUrl tel quel quand renseigné (priorité sur la recherche générique)", async () => {
+  await withMockedFetch(
+    () => Response.json({ id: "9999999999999999999" }),
+    async (calls) => {
+      const entry: AlertContext = {
+        name: "Méga-Lugulabre-ex 115/084 (SIR)",
+        set: "ME05 - Nuit Noire",
+        cardmarketUrl: "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Mega-Chandelure-ex-V3-PBL115",
+      };
+      await sendNewListingAlert(fixtures[0], entry, 1);
+
+      const cardmarketField = calls[0].body.embeds[0].fields[2];
+      assert.equal(
+        cardmarketField.value,
+        "[🔍 Cardmarket](https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Mega-Chandelure-ex-V3-PBL115)"
+      );
+    }
+  );
+});
+
 test("sendNewListingAlert - le lien Cardmarket retire le suffixe de rareté entre parenthèses ET le numéro de carte du nom de l'entrée", async () => {
   // Cas réel diagnostiqué : Cardmarket ne référence pas ses produits par numéro de carte dans
   // le nom -- une recherche "Méga-Darkrai-ex 116/084" renvoie "Aucun résultat", contrairement à
