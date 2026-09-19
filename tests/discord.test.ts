@@ -110,6 +110,7 @@ test("sendNewListingAlert - renvoie l'id du message créé (wait=true) et le dem
 
 test("sendNewListingAlert - couleur et emoji selon la rareté détectée dans le nom de l'entrée", async () => {
   const cases: Array<{ entryName: string; expectedEmoji: string; expectedColor: number }> = [
+    { entryName: "Mewtwo-ex 157/128 (Futuriste Rare)", expectedEmoji: "🛸", expectedColor: 0xff00aa },
     { entryName: "Méga-Darkrai-ex 120/084 (Gold)", expectedEmoji: "🌟", expectedColor: 0xf1c40f },
     { entryName: "Méga-Darkrai-ex 116/084 (SIR)", expectedEmoji: "🌟", expectedColor: 0x9b59b6 },
     { entryName: "Mimantis 085/084 (AR)", expectedEmoji: "✨", expectedColor: 0x3498db },

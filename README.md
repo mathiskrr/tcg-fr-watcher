@@ -252,6 +252,7 @@ plus bas) :
   (recherchée dans cet ordre) :
   | Détecté dans `name`         | Couleur       | Emoji |
   |------------------------------|---------------|-------|
+  | `Futuriste Rare` (rareté du set 30C, encore plus rare que SIR) | magenta | 🛸 |
   | `Gold`                        | doré          | 🌟    |
   | `SIR`                         | violet        | 🌟    |
   | `AR` / `UR`                   | bleu          | ✨    |
