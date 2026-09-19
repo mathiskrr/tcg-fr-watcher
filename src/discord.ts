@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { fetchWithRetry } from "./http.js";
-import { isSealedProductEntry } from "./matcher.js";
+import { isSealedProductEntry, isClassicCollectionEntry } from "./matcher.js";
 import type { MarketplaceItem } from "./types.js";
 
 // Contexte minimal nécessaire à l'embed (nom + set de l'entrée watchlist), sans dépendre du
@@ -46,7 +46,6 @@ const COLOR_GREY = 0x95a5a6;
 const FUTURISTIC_PATTERN = /futuriste/i;
 const GOLD_PATTERN = /\bgold\b/i;
 const SIR_PATTERN = /\bsir\b/i;
-const CLASSIC_COLLECTION_PATTERN = /\bcc\b/i;
 const AR_OR_UR_PATTERN = /\b(ar|ur)\b/i;
 
 interface RarityStyle {
@@ -61,7 +60,7 @@ function detectRarityStyle(entryName: string): RarityStyle {
   if (GOLD_PATTERN.test(entryName) || SIR_PATTERN.test(entryName)) {
     return { color: GOLD_PATTERN.test(entryName) ? COLOR_GOLD : COLOR_PURPLE, emojiPrefix: "🌟 " };
   }
-  if (CLASSIC_COLLECTION_PATTERN.test(entryName)) {
+  if (isClassicCollectionEntry(entryName)) {
     return { color: COLOR_BRONZE, emojiPrefix: "📜 " };
   }
   if (AR_OR_UR_PATTERN.test(entryName)) {

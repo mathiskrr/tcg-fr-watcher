@@ -7,6 +7,7 @@ import {
   diffAlertedItems,
   vintedQueries,
   dedupeByItemId,
+  filterFrenchMatches,
   type Candidate,
 } from "../src/scheduler.js";
 import type { MarketplaceItem } from "../src/types.js";
@@ -276,4 +277,30 @@ test("scénario 2 cycles : un item qui reste dans le top garde son message exist
   assert.deepEqual(diff4.toAdd, []);
   assert.deepEqual(diff4.toDelete, []);
   assert.equal(diff4.toKeep.length, 3, "mêmes 3 items, juste réordonnés par prix -> aucun changement");
+});
+
+test("filterFrenchMatches - entrée Collection Classique : écarte la carte vintage d'origine (même numéro), garde les reprints 30 ans", () => {
+  // Cas réel remonté : "Nostenfer 47/127 platine" (carte d'origine de 2009, 2€) apparaissait
+  // pour l'entrée "Nostenfer G 47/127 (CC)" et squattait le top 3 des moins chères.
+  const items = [
+    makeItem("1", "carte pokemon Nostenfer 47/127 platine"),
+    makeItem("2", "Nostenfert G 47/127 - Platine"),
+    makeItem("3", "Nostenfer G 47/127 reprint 30 ans Pokémon"),
+    makeItem("4", "Carte Pokémon 30e Anniversaire Nostenfer G 47/127"),
+  ];
+
+  const matches = filterFrenchMatches("vinted", "assume-french", items, "Nostenfer G 47/127 (CC)");
+
+  assert.deepEqual(
+    matches.map((m) => m.item.itemId),
+    ["3", "4"]
+  );
+});
+
+test("filterFrenchMatches - entrée hors Collection Classique : aucun marqueur 30 ans exigé", () => {
+  const items = [makeItem("1", "Lokhlass 131/128 carte française"), makeItem("2", "Lokhlass 131/128 30 ans")];
+
+  const matches = filterFrenchMatches("vinted", "assume-french", items, "Lokhlass 131/128 (AR)");
+
+  assert.equal(matches.length, 2);
 });

@@ -215,6 +215,20 @@ rejette aussi les abréviations isolées `EN`/`ENG`/`GB`/`UK` et les drapeaux em
 la casse) : "en" minuscule est une préposition française bien trop courante ("carte **en**
 parfait état") pour servir de signal fiable.
 
+### Entrées "Collection Classique" (CC) : marqueur 30 ans obligatoire
+
+Un reprint de la Collection Classique du set 30C **garde le numéro de la carte d'origine**
+("Nostenfer G 47/127" existe à l'identique dans le set Platine de 2009). Le filtre par numéro de
+carte (`isRelevantToQuery`, `vinted.ts`) laisse donc passer les annonces de la carte vintage —
+souvent moins chères, donc elles squattaient le top 3 à la place des vrais reprints (cas réel
+remonté). Pour les entrées dont le nom contient `(CC...)` (`isClassicCollectionEntry`), le titre
+de l'annonce doit donc mentionner explicitement le set 30 ans (`hasThirtyYearMarker`) : "30 ans",
+"30ans", "30e", "30ème", "30th", "30 years", "30C" ou "ME5.5". Volontairement strict :
+"reprint"/"célébrations"/"anniversaire" seuls sont ambigus (la Collection Classique de 2021, 25e
+anniversaire, réimprimait aussi Dracaufeu 4/102). Contrepartie assumée : un vrai reprint 30 ans
+dont le vendeur n'a mis aucun marqueur dans le titre est écarté — mieux vaut rater ce cas que
+polluer le classement avec des cartes d'origine. S'applique à eBay comme à Vinted.
+
 ## Top 3 le moins cher + anti-spam (scheduler.ts)
 
 Pour chaque entrée de la watchlist et chaque source, `alertCheapestForSource` :

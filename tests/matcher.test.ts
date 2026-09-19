@@ -3,7 +3,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { isFrenchTitle, isSealed, isSealedProductEntry } from "../src/matcher.js";
+import {
+  isFrenchTitle,
+  isSealed,
+  isSealedProductEntry,
+  isClassicCollectionEntry,
+  hasThirtyYearMarker,
+} from "../src/matcher.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -122,4 +128,54 @@ test("isSealedProductEntry - identifie les entrées watchlist de produits scell�
 test("isSealedProductEntry - une entrée carte à l'unité n'est pas identifiée comme produit scellé", () => {
   assert.equal(isSealedProductEntry("Méga-Darkrai-ex 116/084 (SIR)"), false);
   assert.equal(isSealedProductEntry("Mimantis 085/084 (AR)"), false);
+});
+
+test("isClassicCollectionEntry - identifie les entrées Collection Classique par leur tag (CC...)", () => {
+  assert.equal(isClassicCollectionEntry("Pikachu 58/102 (CC)"), true);
+  assert.equal(isClassicCollectionEntry("Raikou 050/185 (CC - Amazing Rare)"), true);
+  assert.equal(isClassicCollectionEntry("Darkrai & Cresselia LEGENDE 100/102 (CC - Partie 2)"), true);
+});
+
+test("isClassicCollectionEntry - une entrée non-CC (set principal, Nuit Noire, scellé) n'est pas identifiée", () => {
+  assert.equal(isClassicCollectionEntry("Lokhlass 131/128 (AR)"), false);
+  assert.equal(isClassicCollectionEntry("Méga-Darkrai-ex 120/084 (Gold)"), false);
+  assert.equal(isClassicCollectionEntry("Display Nuit Noire (36 boosters)"), false);
+});
+
+test("hasThirtyYearMarker - accepte les titres qui mentionnent explicitement le set 30 ans", () => {
+  const titles = [
+    "Dracaufeu reprint 30 ans 4/102",
+    "Pikachu 58/102 30ans Pokémon",
+    "Carte Pokémon 30e Anniversaire Ondine 18/132",
+    "Carte Pokémon Pikachu 58/102 – Réimpression 30ème Anniversaire – Française",
+    "Pikachu 30th celebration 58/102",
+    "Nostenfer G 47/127 30C",
+    "carte pokémon ar me5.5 célébration 30 ans anniversaire",
+    "Charizard 4/102 ME5.5 classic collection",
+  ];
+  for (const title of titles) {
+    assert.equal(hasThirtyYearMarker(title), true, `devrait être accepté : "${title}"`);
+  }
+});
+
+test("hasThirtyYearMarker - rejette les titres de la carte vintage d'origine (cas réel : Nostenfer 47/127 Platine)", () => {
+  const titles = [
+    "carte pokemon Nostenfer 47/127 platine",
+    "Nostenfert G 47/127 - Platine",
+    "Pokémon Nostenfer G – 47/127",
+    ". Farfuret 25/111 Rare Neo Genesis",
+    "Pikachu 58/102 - 1999",
+    "Zacian V 138/202 EB1 Épée et Bouclier",
+    // Ambigus par nature (25e anniversaire 2021 réimprimait aussi Dracaufeu 4/102) : rejetés.
+    "Dracaufeu 4/102 reprint célébrations",
+    "Dracaufeu 4/102 anniversaire",
+  ];
+  for (const title of titles) {
+    assert.equal(hasThirtyYearMarker(title), false, `devrait être rejeté : "${title}"`);
+  }
+});
+
+test("hasThirtyYearMarker - un nombre en 30 dans un autre contexte ne déclenche pas de faux positif", () => {
+  assert.equal(hasThirtyYearMarker("Lot de 30 cartes Pokémon en parfait état"), false);
+  assert.equal(hasThirtyYearMarker("Carte Pokémon 130/132 holo"), false);
 });

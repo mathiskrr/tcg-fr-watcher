@@ -3,7 +3,14 @@ import cron from "node-cron";
 import { config } from "./config.js";
 import { searchEbay } from "./ebay.js";
 import { searchVinted } from "./vinted.js";
-import { isFrenchTitle, isSealed, isSealedProductEntry, type LanguageFilterMode } from "./matcher.js";
+import {
+  isFrenchTitle,
+  isSealed,
+  isSealedProductEntry,
+  isClassicCollectionEntry,
+  hasThirtyYearMarker,
+  type LanguageFilterMode,
+} from "./matcher.js";
 import { getLastAlertedItems, setLastAlertedItems, type AlertedItem } from "./db.js";
 import { sendNewListingAlert, deleteListingAlert } from "./discord.js";
 import type { MarketplaceItem } from "./types.js";
@@ -105,13 +112,14 @@ export function diffAlertedItems(current: Candidate[], previous: AlertedItem[] |
 // un cycle : le top N se recalcule à chaque cycle sur l'ensemble des résultats, sans dédup
 // par item individuel (voir alertCheapestForSource pour la logique anti-spam au niveau du
 // top 3 dans son ensemble).
-function filterFrenchMatches(
+export function filterFrenchMatches(
   source: string,
   mode: LanguageFilterMode,
   items: MarketplaceItem[],
   entryName: string
 ): Candidate[] {
   const requireSealed = isSealedProductEntry(entryName);
+  const requireThirtyYear = isClassicCollectionEntry(entryName);
   const matches: Candidate[] = [];
 
   for (const item of items) {
@@ -121,6 +129,11 @@ function filterFrenchMatches(
     // Pour une entrée "produit scellé" (Display, ETB, Bundle, Tripack, Booster...), une
     // annonce indiquant explicitement que le produit est ouvert/incomplet est écartée.
     if (requireSealed && !isSealed(item.title)) continue;
+
+    // Pour une entrée "Collection Classique" (reprint 30 ans, même numéro que la carte
+    // vintage d'origine), une annonce sans marqueur 30 ans est très probablement la carte
+    // d'origine -- voir hasThirtyYearMarker dans matcher.ts.
+    if (requireThirtyYear && !hasThirtyYearMarker(item.title)) continue;
 
     // Les itemId sont propres à chaque marketplace : on les préfixe par source pour éviter
     // qu'un id Vinted et un id eBay identiques ne soient confondus dans le top 3 stocké.

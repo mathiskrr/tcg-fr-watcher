@@ -99,3 +99,31 @@ const SEALED_PRODUCT_NAME_PATTERN = /\b(display|etb|bundle|tripack|booster)\b/i;
 export function isSealedProductEntry(entryName: string): boolean {
   return SEALED_PRODUCT_NAME_PATTERN.test(entryName);
 }
+
+// Entrées watchlist "Collection Classique" du set 30C (reprints à cadre doré, ex: "Pikachu
+// 58/102 (CC)") : identifiables par le tag "(CC...)" dans leur nom. Utilisé par scheduler.ts
+// (filtre hasThirtyYearMarker) et discord.ts (choix de l'emoji/couleur d'embed).
+const CLASSIC_COLLECTION_ENTRY_PATTERN = /\bcc\b/i;
+
+export function isClassicCollectionEntry(entryName: string): boolean {
+  return CLASSIC_COLLECTION_ENTRY_PATTERN.test(entryName);
+}
+
+// Cas réel diagnostiqué : un reprint Collection Classique GARDE le numéro de la carte d'origine
+// ("Nostenfer 47/127" existe à l'identique dans le set Platine de 2009), donc le filtre par
+// numéro de carte (voir isRelevantToQuery dans vinted.ts) laisse passer les annonces de la carte
+// vintage d'origine -- souvent moins chères, donc elles squattent le top 3 à la place des vrais
+// reprints 30 ans. Pour ces entrées, le titre doit donc mentionner explicitement le set 30 ans.
+//
+// Volontairement STRICT (marqueurs 30 ans uniquement) : "reprint"/"célébrations"/"anniversaire"
+// seuls sont ambigus (la Collection Classique de 2021, 25e anniversaire, réimprimait aussi
+// Dracaufeu 4/102...). Contrepartie assumée : une annonce d'un vrai reprint 30 ans dont le
+// vendeur n'a mis aucun de ces marqueurs dans le titre est écartée -- mieux vaut rater ce cas
+// que polluer le classement avec des cartes d'origine. Testé sur le titre sans accents.
+//   - "30 ans" / "30ans" / "30e" / "30eme" / "30th" / "30 years"
+//   - "30C" (code du set) et "ME5.5" (code de l'extension, vu dans des titres réels)
+const THIRTY_YEAR_MARKER_PATTERN = /\b(30\s?(ans|e|eme|th|years?)|30c|thirtieth|me\s?0?5[.,]5)\b/i;
+
+export function hasThirtyYearMarker(title: string): boolean {
+  return THIRTY_YEAR_MARKER_PATTERN.test(stripAccents(title));
+}
