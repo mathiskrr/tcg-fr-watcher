@@ -9,6 +9,8 @@ const FAST_FORM_TIMEOUT_MS = 50;
 const FAST_POST_SUBMIT_TIMEOUT_MS = 50;
 const FAST_POLL_INTERVAL_MS = 10;
 const FAST_SUBMIT_READY_DELAY_MS = 0;
+const FAST_CLOUDFLARE_DETECT_TIMEOUT_MS = 10;
+const FAST_CLOUDFLARE_POST_CLICK_DELAY_MS = 0;
 
 interface MockFrameOptions {
   url: string;
@@ -119,7 +121,9 @@ test("performVintedLogin - succès : renvoie le token du cookie access_token_web
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "eyJ.abc.def" });
@@ -141,7 +145,9 @@ test("performVintedLogin - ignore un cookie sans rapport et prend le bon par son
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "le-bon-token" });
@@ -158,7 +164,9 @@ test("performVintedLogin - détecte un captcha/2FA dans le HTML de la page", asy
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "captcha_or_2fa" });
@@ -175,7 +183,9 @@ test("performVintedLogin - détecte des identifiants refusés dans le HTML de la
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "invalid_credentials" });
@@ -192,7 +202,9 @@ test("performVintedLogin - ni cookie ni motif d'erreur avant le délai -> timeou
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "timeout" });
@@ -209,7 +221,9 @@ test("performVintedLogin - un timeout Playwright sur goto() est classé 'timeout
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "timeout" });
@@ -226,7 +240,9 @@ test("performVintedLogin - un timeout Playwright sur waitForSelector() est class
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "timeout" });
@@ -248,7 +264,9 @@ test("performVintedLogin - une erreur Playwright non liée à un timeout est cla
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, {
@@ -273,7 +291,9 @@ test("performVintedLogin - ne fait jamais fuiter le mot de passe dans une erreur
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.equal(outcome.status, "unknown_error");
@@ -292,7 +312,9 @@ test("performVintedLogin - logge précisément l'étape et le sélecteur qui ont
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.ok(
@@ -318,7 +340,9 @@ test("performVintedLogin - popup de consentement cookies présente : cliquée, p
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-apres-popup-cookies" });
@@ -347,7 +371,9 @@ test("performVintedLogin - pas de popup de consentement cookies : aucune erreur,
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-sans-popup" });
@@ -385,7 +411,9 @@ test("performVintedLogin - popup de consentement dans un iframe CMP (cas réel d
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-via-iframe" });
@@ -400,6 +428,71 @@ test("performVintedLogin - popup de consentement dans un iframe CMP (cas réel d
     pageClickCalls,
     ['button[type="submit"]:has-text("Continuer")'],
     "seul le clic sur le bouton de connexion doit passer par la page"
+  );
+});
+
+test("performVintedLogin - widget de challenge Cloudflare interactif détecté : la case à cocher est cliquée avant de chercher le formulaire", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const challengeFrameClickCalls: string[] = [];
+
+  const challengeFrame = makeMockFrame({
+    url: "https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/g/turnstile/if/ov2/av0/rcv/abc123",
+    name: "cf-chl-widget",
+    hasConsentButton: true, // réutilise le flag générique du mock : "le sélecteur attendu est présent"
+    clickCalls: challengeFrameClickCalls,
+  });
+
+  const page = makeMockPage({
+    cookies: [{ name: "access_token_web", value: "token-apres-challenge-cloudflare" }],
+    frames: [challengeFrame],
+  });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "token-apres-challenge-cloudflare" });
+  assert.ok(
+    logSpy.mock.calls.some((c) => /widget de challenge Cloudflare interactif détecté/.test(String(c.arguments[0]))),
+    "doit logger la détection du widget"
+  );
+  assert.ok(
+    logSpy.mock.calls.some((c) => /case à cocher du challenge Cloudflare cliquée/.test(String(c.arguments[0]))),
+    "doit logger le clic réussi sur la case à cocher"
+  );
+  assert.deepEqual(challengeFrameClickCalls, ['input[type="checkbox"]']);
+});
+
+test("performVintedLogin - aucun widget de challenge Cloudflare détecté : log clair, le login procède normalement", async (t) => {
+  const logSpy = t.mock.method(console, "log", () => {});
+  const page = makeMockPage({ cookies: [{ name: "access_token_web", value: "token-sans-challenge" }] });
+
+  const outcome = await performVintedLogin(
+    page,
+    "user@example.test",
+    "hunter2",
+    FAST_NAV_TIMEOUT_MS,
+    FAST_FORM_TIMEOUT_MS,
+    FAST_POST_SUBMIT_TIMEOUT_MS,
+    FAST_POLL_INTERVAL_MS,
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
+  );
+
+  assert.deepEqual(outcome, { status: "success", token: "token-sans-challenge" });
+  assert.ok(
+    logSpy.mock.calls.some((c) => /aucun widget de challenge Cloudflare interactif détecté/.test(String(c.arguments[0]))),
+    "doit logger l'absence de widget sans lever d'erreur"
   );
 });
 
@@ -421,7 +514,9 @@ test("performVintedLogin - un iframe présent mais qui ne correspond à aucun CM
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-fallback-page" });
@@ -446,7 +541,9 @@ test("performVintedLogin - clique bien le bouton 'Continuer' précis (pas un des
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-bouton-continuer" });
@@ -468,7 +565,9 @@ test("performVintedLogin - clique le bouton de connexion avec force: true (cas r
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.deepEqual(outcome, { status: "success", token: "token-force-click" });
@@ -489,7 +588,9 @@ test("performVintedLogin - un clic échoué sur le bouton de connexion est class
     FAST_FORM_TIMEOUT_MS,
     FAST_POST_SUBMIT_TIMEOUT_MS,
     FAST_POLL_INTERVAL_MS,
-    FAST_SUBMIT_READY_DELAY_MS
+    FAST_SUBMIT_READY_DELAY_MS,
+    FAST_CLOUDFLARE_DETECT_TIMEOUT_MS,
+    FAST_CLOUDFLARE_POST_CLICK_DELAY_MS
   );
 
   assert.equal(outcome.status, "timeout");

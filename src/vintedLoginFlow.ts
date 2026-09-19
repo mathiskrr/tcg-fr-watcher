@@ -111,6 +111,67 @@ function findCookieConsentFrame(page: LoginPage): LoginFrame | null {
   return page.frames().find((frame) => CMP_FRAME_URL_PATTERN.test(frame.url())) ?? null;
 }
 
+// Cloudflare a deux familles de challenge bien distinctes : "non-interactive" (résolu tout
+// seul en JS, aucune case à cocher -- c'est ce qu'on a observé en prod, voir CLOUDFLARE_CHALLENGE_PATTERN
+// plus bas) et "managed"/"interactive" (widget Turnstile avec une case "Vérifiez que vous êtes
+// humain", hébergé dans un iframe challenges.cloudflare.com, potentiellement imbriqué dans un
+// second iframe -- page.frames() les liste tous, imbrication comprise, donc un simple filtre par
+// URL suffit à trouver le bon sans avoir à descendre l'arbre de frames à la main). On vérifie
+// systématiquement les deux : rien ne garantit que Cloudflare ne bascule pas sur le mode
+// interactif pour cette IP à un moment donné.
+const CLOUDFLARE_CHALLENGE_FRAME_URL_PATTERN = /challenges\.cloudflare\.com/i;
+const CLOUDFLARE_CHECKBOX_SELECTOR = 'input[type="checkbox"]';
+
+// Délai d'apparition du widget après goto() -- généreux mais pas bloquant : le cas majoritaire
+// (pas de challenge interactif, cf. constat "non-interactive" en prod) doit rester rapide.
+const CLOUDFLARE_CHALLENGE_DETECT_TIMEOUT_MS = 8_000;
+// Laisse le temps à Cloudflare de valider le clic et de rediriger avant de chercher le
+// formulaire de login -- sans quoi EMAIL_SELECTOR serait cherché sur une page encore en
+// transition.
+const CLOUDFLARE_CHALLENGE_POST_CLICK_DELAY_MS = 3_000;
+
+function findCloudflareChallengeFrame(page: LoginPage): LoginFrame | null {
+  return page.frames().find((frame) => CLOUDFLARE_CHALLENGE_FRAME_URL_PATTERN.test(frame.url())) ?? null;
+}
+
+// Ne lève JAMAIS d'exception (même logique que acceptCookieConsentIfPresent) : l'absence de
+// widget interactif est le cas normal (challenge non-interactif ou pas de challenge du tout),
+// pas une erreur. detectTimeoutMs/pollIntervalMs/postClickDelayMs exposés (au lieu d'être en
+// dur) pour les mêmes raisons que le reste des délais de ce fichier -- voir performVintedLogin.
+async function solveCloudflareChallengeIfPresent(
+  page: LoginPage,
+  detectTimeoutMs: number,
+  pollIntervalMs: number,
+  postClickDelayMs: number
+): Promise<void> {
+  const deadline = Date.now() + detectTimeoutMs;
+  let frame: LoginFrame | null = null;
+  while (Date.now() < deadline) {
+    frame = findCloudflareChallengeFrame(page);
+    if (frame) break;
+    await sleep(pollIntervalMs);
+  }
+
+  if (!frame) {
+    console.log("[vintedLoginFlow] aucun widget de challenge Cloudflare interactif détecté (challenge absent ou non-interactif)");
+    return;
+  }
+
+  console.log(`[vintedLoginFlow] widget de challenge Cloudflare interactif détecté (url: ${frame.url()}), tentative de clic sur la case à cocher`);
+  try {
+    await frame.waitForSelector(CLOUDFLARE_CHECKBOX_SELECTOR, { timeout: detectTimeoutMs });
+    await frame.click(CLOUDFLARE_CHECKBOX_SELECTOR, { force: true });
+    console.log("[vintedLoginFlow] case à cocher du challenge Cloudflare cliquée");
+    await sleep(postClickDelayMs);
+  } catch (err) {
+    console.log(
+      `[vintedLoginFlow] échec du clic sur la case à cocher Cloudflare (ignoré, best-effort) : ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    );
+  }
+}
+
 // Ne lève JAMAIS d'exception : l'absence de popup n'est pas une erreur, et une popup présente
 // mais non cliquée avec succès ne doit pas non plus bloquer la suite (best-effort pur).
 // Cherche le bouton dans l'iframe du CMP si une frame correspondante est détectée (voir
@@ -257,7 +318,9 @@ export async function performVintedLogin(
   formTimeoutMs = FORM_TIMEOUT_MS,
   postSubmitTimeoutMs = POST_SUBMIT_TIMEOUT_MS,
   pollIntervalMs = POLL_INTERVAL_MS,
-  submitButtonReadyDelayMs = SUBMIT_BUTTON_READY_DELAY_MS
+  submitButtonReadyDelayMs = SUBMIT_BUTTON_READY_DELAY_MS,
+  cloudflareChallengeDetectTimeoutMs = CLOUDFLARE_CHALLENGE_DETECT_TIMEOUT_MS,
+  cloudflareChallengePostClickDelayMs = CLOUDFLARE_CHALLENGE_POST_CLICK_DELAY_MS
 ): Promise<LoginOutcome> {
   try {
     await page.goto(LOGIN_URL, { timeout: navTimeoutMs });
@@ -265,6 +328,7 @@ export async function performVintedLogin(
     return classifyStepError("navigation vers la page de login (page.goto)", err);
   }
 
+  await solveCloudflareChallengeIfPresent(page, cloudflareChallengeDetectTimeoutMs, pollIntervalMs, cloudflareChallengePostClickDelayMs);
   await acceptCookieConsentIfPresent(page);
 
   try {
