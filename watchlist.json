@@ -204,13 +204,15 @@
     "name": "Cizayox-ex 108/115 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Cizayox ex 108/115 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Cizayox ex 108/115 30 Ans Pokemon reprint"
+    "vintedQuery": "Cizayox ex 108/115 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Scizor-ex-30CUF-108"
   },
   {
     "name": "Métalosse δ 11/113 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Metalosse delta 11/113 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Metalosse delta 11/113 30 Ans Pokemon reprint"
+    "vintedQuery": "Metalosse delta 11/113 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Metagross-Delta-Species-30CDS-11"
   },
   {
     "name": "Palkia LV.X 106/106 (CC)",
@@ -258,7 +260,8 @@
     "name": "Méga-Gardevoir-EX 106/160 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Mega Gardevoir EX 106/160 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Mega Gardevoir EX 106/160 30 Ans Pokemon reprint"
+    "vintedQuery": "Mega Gardevoir EX 106/160 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/MGardevoir-EX-30CPRC-106"
   },
   {
     "name": "Amphinobi TURBO 41/122 (CC)",
