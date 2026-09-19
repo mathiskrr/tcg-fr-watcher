@@ -6,7 +6,8 @@
     "vintedQuery": [
       "display Nuit Noire ME05 36 boosters",
       "display Nuit Noire ME5 36 boosters"
-    ]
+    ],
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Booster-Boxes/Pitch-Black-Booster-Box"
   },
   {
     "name": "Demi-display Nuit Noire (18 boosters)",
@@ -21,157 +22,183 @@
     "name": "ETB Nuit Noire",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "ETB coffret dresseur elite Nuit Noire ME05 française",
-    "vintedQuery": "ETB Nuit Noire ME05"
+    "vintedQuery": "ETB Nuit Noire ME05",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Elite-Trainer-Boxes/Pitch-Black-Elite-Trainer-Box"
   },
   {
     "name": "Bundle 6 boosters Nuit Noire",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "bundle 6 boosters Nuit Noire ME05 française",
-    "vintedQuery": "bundle 6 boosters Nuit Noire ME05"
+    "vintedQuery": "bundle 6 boosters Nuit Noire ME05",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Booster-Boxes/Pitch-Black-Booster-Bundle"
   },
   {
     "name": "Tripack Nuit Noire",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "tripack Nuit Noire ME05 française",
-    "vintedQuery": "tripack Nuit Noire ME05"
+    "vintedQuery": "tripack Nuit Noire ME05",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Blisters/Pitch-Black-Binacle-3-Pack-Blister"
   },
   {
     "name": "Méga-Lugulabre-ex 115/084 (SIR)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Mega Lugulabre ex 115/084 Nuit Noire carte française",
-    "vintedQuery": "Mega Lugulabre ex 115/084 Nuit Noire"
+    "vintedQuery": "Mega Lugulabre ex 115/084 Nuit Noire",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Mega-Chandelure-ex-V3-PBL115"
   },
   {
     "name": "Morpeko-ex 117/084 (SIR)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Morpeko ex 117/084 Nuit Noire carte française",
-    "vintedQuery": "Morpeko ex 117/084 Nuit Noire"
+    "vintedQuery": "Morpeko ex 117/084 Nuit Noire",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Morpeko-ex-V3-PBL117"
   },
   {
     "name": "Combat Final de Gladio 118/084 (SIR)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Combat Final de Gladio 118/084 Nuit Noire carte française",
-    "vintedQuery": "Combat Final de Gladio 118/084 Nuit Noire"
+    "vintedQuery": "Combat Final de Gladio 118/084 Nuit Noire",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Gladions-Final-Battle-V3-PBL118"
   },
   {
     "name": "Albia 119/084 (SIR)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Albia 119/084 Nuit Noire carte française",
-    "vintedQuery": "Albia 119/084 Nuit Noire"
+    "vintedQuery": "Albia 119/084 Nuit Noire",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Gwynn-V3-PBL119"
   },
   {
     "name": "Méga-Darkrai-ex 120/084 (Gold)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Mega Darkrai ex 120/084 Nuit Noire or carte française",
-    "vintedQuery": "Mega Darkrai ex 120/084 Nuit Noire gold"
+    "vintedQuery": "Mega Darkrai ex 120/084 Nuit Noire gold",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Mega-Darkrai-ex-V4-PBL120"
   },
   {
     "name": "Lokhlass 131/128 (AR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Lokhlass 131/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Lokhlass 131/128 30 Ans Pokemon"
+    "vintedQuery": "Lokhlass 131/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Lapras-V2-30C131"
   },
   {
     "name": "Salarsen 134/128 (AR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Salarsen 134/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Salarsen 134/128 30 Ans Pokemon"
+    "vintedQuery": "Salarsen 134/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Toxtricity-V2-30C134"
   },
   {
     "name": "Baudrive 136/128 (AR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Baudrive 136/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Baudrive 136/128 30 Ans Pokemon"
+    "vintedQuery": "Baudrive 136/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Drifloon-V2-30C136"
   },
   {
     "name": "Lugulabre 137/128 (AR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Lugulabre 137/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Lugulabre 137/128 30 Ans Pokemon"
+    "vintedQuery": "Lugulabre 137/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Chandelure-V2-30C137"
   },
   {
     "name": "Lougaroc 138/128 (AR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Lougaroc 138/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Lougaroc 138/128 30 Ans Pokemon"
+    "vintedQuery": "Lougaroc 138/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Lycanroc-V2-30C138"
   },
   {
     "name": "Miaouss de Galar 141/128 (AR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Miaouss de Galar 141/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Miaouss de Galar 141/128 30 Ans Pokemon"
+    "vintedQuery": "Miaouss de Galar 141/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Galarian-Meowth-V2-30C141"
   },
   {
     "name": "Chochodile-ex 147/128 (SIR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Chochodile ex 147/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Chochodile ex 147/128 30 Ans Pokemon"
+    "vintedQuery": "Chochodile ex 147/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Fuecoco-ex-V2-30C147"
   },
   {
     "name": "Amphinobi-ex 148/128 (SIR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Amphinobi ex 148/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Amphinobi ex 148/128 30 Ans Pokemon"
+    "vintedQuery": "Amphinobi ex 148/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Greninja-ex-V2-30C148"
   },
   {
     "name": "Pikachu-ex 149/128 (SIR Jour)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Pikachu ex 149/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Pikachu ex 149/128 30 Ans Pokemon"
+    "vintedQuery": "Pikachu ex 149/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Pikachu-ex-V2-30C149"
   },
   {
     "name": "Pikachu-ex 150/128 (SIR Nuit)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Pikachu ex 150/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Pikachu ex 150/128 30 Ans Pokemon"
+    "vintedQuery": "Pikachu ex 150/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Pikachu-ex-V2-30C150"
   },
   {
     "name": "Drattak-ex 156/128 (SIR)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Drattak ex 156/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Drattak ex 156/128 30 Ans Pokemon"
+    "vintedQuery": "Drattak ex 156/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Salamence-ex-V2-30C156"
   },
   {
     "name": "Mewtwo-ex 157/128 (Futuriste Rare)",
     "set": "30C - 30e Anniversaire",
     "ebayQuery": "Mewtwo ex 157/128 30 Ans Pokemon carte française",
-    "vintedQuery": "Mewtwo ex 157/128 30 Ans Pokemon"
+    "vintedQuery": "Mewtwo ex 157/128 30 Ans Pokemon",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Mewtwo-ex-V3-30C157"
   },
   {
     "name": "Pikachu 58/102 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Pikachu 58/102 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Pikachu 58/102 30 Ans Pokemon reprint"
+    "vintedQuery": "Pikachu 58/102 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Pikachu-30CBS-58"
   },
   {
     "name": "Dracaufeu 4/102 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Dracaufeu 4/102 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Dracaufeu 4/102 30 Ans Pokemon reprint"
+    "vintedQuery": "Dracaufeu 4/102 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Charizard-30CBS-4"
   },
   {
     "name": "Ondine 18/132 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Ondine 18/132 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Ondine 18/132 30 Ans Pokemon reprint"
+    "vintedQuery": "Ondine 18/132 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Misty-30CGH-18"
   },
   {
     "name": "Rondoudou d'Erika 69/132 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Rondoudou Erika 69/132 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Rondoudou Erika 69/132 30 Ans Pokemon reprint"
+    "vintedQuery": "Rondoudou Erika 69/132 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Erikas-Jigglypuff-30CGC-69"
   },
   {
     "name": "Farfuret 25/111 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Farfuret 25/111 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Farfuret 25/111 30 Ans Pokemon reprint"
+    "vintedQuery": "Farfuret 25/111 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Sneasel-30CNG-25"
   },
   {
     "name": "Delcatty 5/109 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Delcatty 5/109 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Delcatty 5/109 30 Ans Pokemon reprint"
+    "vintedQuery": "Delcatty 5/109 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Delcatty-30CRS-5"
   },
   {
     "name": "Cizayox-ex 108/115 (CC)",
@@ -189,37 +216,43 @@
     "name": "Palkia LV.X 106/106 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Palkia LV.X 106/106 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Palkia LV.X 106/106 30 Ans Pokemon reprint"
+    "vintedQuery": "Palkia LV.X 106/106 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Palkia-LVX-30CGE-106"
   },
   {
     "name": "Nostenfer G 47/127 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Nostenfer G 47/127 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Nostenfer G 47/127 30 Ans Pokemon reprint"
+    "vintedQuery": "Nostenfer G 47/127 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Crobat-G-Lv44-30CPL-47"
   },
   {
     "name": "Darkrai & Cresselia LEGENDE 100/102 (CC - Partie 2)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Darkrai Cresselia LEGENDE 100/102 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Darkrai Cresselia LEGENDE 100/102 30 Ans Pokemon reprint"
+    "vintedQuery": "Darkrai Cresselia LEGENDE 100/102 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Darkrai-Cresselia-LEGEND-30CTM-100"
   },
   {
     "name": "N 101/101 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "carte N 101/101 30 Ans Pokemon reprint française",
-    "vintedQuery": "carte N 101/101 30 Ans Pokemon reprint"
+    "vintedQuery": "carte N 101/101 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/N-30CNVI-101"
   },
   {
     "name": "Rayquaza-EX 85/124 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Rayquaza EX 85/124 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Rayquaza EX 85/124 30 Ans Pokemon reprint"
+    "vintedQuery": "Rayquaza EX 85/124 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Rayquaza-EX-30CDRX-85"
   },
   {
     "name": "Genesect-EX 11/101 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Genesect EX 11/101 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Genesect EX 11/101 30 Ans Pokemon reprint"
+    "vintedQuery": "Genesect EX 11/101 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Genesect-EX-30CPLB-11"
   },
   {
     "name": "Méga-Gardevoir-EX 106/160 (CC)",
@@ -231,13 +264,15 @@
     "name": "Amphinobi TURBO 41/122 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Amphinobi TURBO 41/122 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Amphinobi TURBO 41/122 30 Ans Pokemon reprint"
+    "vintedQuery": "Amphinobi TURBO 41/122 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Greninja-BREAK-30CBKP-41"
   },
   {
     "name": "Solgaleo-GX 89/149 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Solgaleo GX 89/149 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Solgaleo GX 89/149 30 Ans Pokemon reprint"
+    "vintedQuery": "Solgaleo GX 89/149 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Solgaleo-GX-30CSUM-89"
   },
   {
     "name": "Mouscoto-GX 57/111 (CC)",
@@ -249,36 +284,42 @@
     "name": "Pikachu & Zekrom-GX 33/181 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Pikachu Zekrom GX 33/181 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Pikachu Zekrom GX 33/181 30 Ans Pokemon reprint"
+    "vintedQuery": "Pikachu Zekrom GX 33/181 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Pikachu-Zekrom-GX-30CTEU-33"
   },
   {
     "name": "Zacian V 138/202 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Zacian V 138/202 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Zacian V 138/202 30 Ans Pokemon reprint"
+    "vintedQuery": "Zacian V 138/202 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Zacian-V-30CSSH-138"
   },
   {
     "name": "Raikou 050/185 (CC - Amazing Rare)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Raikou 050/185 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Raikou 050/185 30 Ans Pokemon reprint"
+    "vintedQuery": "Raikou 050/185 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Raikou-30CVIV-50"
   },
   {
     "name": "Mew VMAX 114/264 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Mew VMAX 114/264 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Mew VMAX 114/264 30 Ans Pokemon reprint"
+    "vintedQuery": "Mew VMAX 114/264 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Mew-VMAX-30CFST-114"
   },
   {
     "name": "Arceus VSTAR 123/172 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Arceus VSTAR 123/172 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Arceus VSTAR 123/172 30 Ans Pokemon reprint"
+    "vintedQuery": "Arceus VSTAR 123/172 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Arceus-VSTAR-30CBRS-123"
   },
   {
     "name": "Magicarpe 203/193 (CC)",
     "set": "30C - Collection Classique",
     "ebayQuery": "Magicarpe 203/193 30 Ans Pokemon reprint carte française",
-    "vintedQuery": "Magicarpe 203/193 30 Ans Pokemon reprint"
+    "vintedQuery": "Magicarpe 203/193 30 Ans Pokemon reprint",
+    "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/30th-Celebration/Magikarp-30CPAL-203"
   }
 ]
