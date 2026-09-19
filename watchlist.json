@@ -36,12 +36,6 @@
     "vintedQuery": "tripack Nuit Noire ME05"
   },
   {
-    "name": "Poissirène 087/084 (AR)",
-    "set": "ME05 - Nuit Noire",
-    "ebayQuery": "Poissirene 087/084 Nuit Noire carte française",
-    "vintedQuery": "Poissirene 087/084 Nuit Noire"
-  },
-  {
     "name": "Méga-Lugulabre-ex 115/084 (SIR)",
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Mega Lugulabre ex 115/084 Nuit Noire carte française",
@@ -70,5 +64,221 @@
     "set": "ME05 - Nuit Noire",
     "ebayQuery": "Mega Darkrai ex 120/084 Nuit Noire or carte française",
     "vintedQuery": "Mega Darkrai ex 120/084 Nuit Noire gold"
+  },
+  {
+    "name": "Lokhlass 131/128 (AR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Lokhlass 131/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Lokhlass 131/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Salarsen 134/128 (AR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Salarsen 134/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Salarsen 134/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Baudrive 136/128 (AR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Baudrive 136/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Baudrive 136/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Lugulabre 137/128 (AR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Lugulabre 137/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Lugulabre 137/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Lougaroc 138/128 (AR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Lougaroc 138/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Lougaroc 138/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Miaouss de Galar 141/128 (AR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Miaouss de Galar 141/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Miaouss de Galar 141/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Chochodile-ex 147/128 (SIR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Chochodile ex 147/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Chochodile ex 147/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Amphinobi-ex 148/128 (SIR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Amphinobi ex 148/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Amphinobi ex 148/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Pikachu-ex 149/128 (SIR Jour)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Pikachu ex 149/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Pikachu ex 149/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Pikachu-ex 150/128 (SIR Nuit)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Pikachu ex 150/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Pikachu ex 150/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Drattak-ex 156/128 (SIR)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Drattak ex 156/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Drattak ex 156/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Mewtwo-ex 157/128 (Futuriste Rare)",
+    "set": "30C - 30e Anniversaire",
+    "ebayQuery": "Mewtwo ex 157/128 30 Ans Pokemon carte française",
+    "vintedQuery": "Mewtwo ex 157/128 30 Ans Pokemon"
+  },
+  {
+    "name": "Pikachu 58/102 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Pikachu 58/102 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Pikachu 58/102 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Dracaufeu 4/102 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Dracaufeu 4/102 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Dracaufeu 4/102 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Ondine 18/132 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Ondine 18/132 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Ondine 18/132 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Rondoudou d'Erika 69/132 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Rondoudou Erika 69/132 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Rondoudou Erika 69/132 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Farfuret 25/111 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Farfuret 25/111 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Farfuret 25/111 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Delcatty 5/109 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Delcatty 5/109 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Delcatty 5/109 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Cizayox-ex 108/115 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Cizayox ex 108/115 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Cizayox ex 108/115 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Métalosse δ 11/113 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Metalosse delta 11/113 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Metalosse delta 11/113 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Palkia LV.X 106/106 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Palkia LV.X 106/106 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Palkia LV.X 106/106 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Nostenfer G 47/127 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Nostenfer G 47/127 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Nostenfer G 47/127 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Darkrai & Cresselia LEGENDE 100/102 (CC - Partie 2)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Darkrai Cresselia LEGENDE 100/102 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Darkrai Cresselia LEGENDE 100/102 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "N 101/101 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "carte N 101/101 30 Ans Pokemon reprint française",
+    "vintedQuery": "carte N 101/101 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Rayquaza-EX 85/124 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Rayquaza EX 85/124 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Rayquaza EX 85/124 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Genesect-EX 11/101 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Genesect EX 11/101 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Genesect EX 11/101 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Méga-Gardevoir-EX 106/160 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Mega Gardevoir EX 106/160 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Mega Gardevoir EX 106/160 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Amphinobi TURBO 41/122 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Amphinobi TURBO 41/122 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Amphinobi TURBO 41/122 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Solgaleo-GX 89/149 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Solgaleo GX 89/149 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Solgaleo GX 89/149 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Mouscoto-GX 57/111 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Mouscoto GX 57/111 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Mouscoto GX 57/111 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Pikachu & Zekrom-GX 33/181 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Pikachu Zekrom GX 33/181 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Pikachu Zekrom GX 33/181 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Zacian V 138/202 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Zacian V 138/202 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Zacian V 138/202 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Raikou 050/185 (CC - Amazing Rare)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Raikou 050/185 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Raikou 050/185 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Mew VMAX 114/264 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Mew VMAX 114/264 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Mew VMAX 114/264 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Arceus VSTAR 123/172 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Arceus VSTAR 123/172 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Arceus VSTAR 123/172 30 Ans Pokemon reprint"
+  },
+  {
+    "name": "Magicarpe 203/193 (CC)",
+    "set": "30C - Collection Classique",
+    "ebayQuery": "Magicarpe 203/193 30 Ans Pokemon reprint carte française",
+    "vintedQuery": "Magicarpe 203/193 30 Ans Pokemon reprint"
   }
 ]

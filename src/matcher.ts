@@ -13,15 +13,15 @@ export type LanguageFilterMode = "strict" | "assume-french";
 // Mots-clés qui indiquent explicitement une langue étrangère -> exclusion immédiate,
 // quel que soit le mode.
 const FOREIGN_LANGUAGE_PATTERN =
-  /\b(english|en anglais|jap(an|on)?ese?|japon(ais)?e?|jp\b|korean|coréen|german|allemand|deutsch|italian|italien(ne)?|italiano|spanish|espagnol|español|chinese|chinois|dutch|néerlandais|portuguese|portugais)\b/i;
+  /\b(english|en anglais|jap(an|on)?ese?|japon(ais)?e?|jp\b|korean|coréen|german|allemand|deutsch|italian|italien(ne)?|italiano|carta|completo|spanish|espagnol|español|chinese|chinois|dutch|néerlandais|portuguese|portugais)\b/i;
 
 // Abréviations de langue isolées (tags de marketplace, ex: "Charkos EN 🇬🇧").
-// "ENG"/"GB"/"UK" n'ont pas d'équivalent courant en français -> vérifiées insensibles à
-// la casse. "EN" est en revanche une préposition française extrêmement courante ("carte
+// "ENG"/"GB"/"UK"/"ITA" n'ont pas d'équivalent courant en français -> vérifiées insensibles
+// à la casse. "EN" est en revanche une préposition française extrêmement courante ("carte
 // EN parfait état") en minuscules -> on ne la traite comme tag de langue que si elle
 // apparaît en MAJUSCULES isolées (comparaison sensible à la casse), ce qui correspond à
 // l'usage réel des tags de langue sur les marketplaces.
-const FOREIGN_LANGUAGE_ABBREVIATION_PATTERN = /\b(ENG|GB|UK)\b/i;
+const FOREIGN_LANGUAGE_ABBREVIATION_PATTERN = /\b(ENG|GB|UK|ITA)\b/i;
 const ENGLISH_UPPERCASE_TAG_PATTERN = /\bEN\b/;
 
 // Drapeaux emoji de pays non-francophones -> indicateur fort de langue étrangère.
