@@ -157,7 +157,7 @@ src/
   config.ts     # variables d'env typées + validation
   types.ts      # MarketplaceItem : forme commune des annonces (eBay, Vinted, ...)
   ebay.ts       # client eBay Browse API (OAuth2 client credentials)
-  vinted.ts     # client Vinted (endpoint interne catalog/items, retry sur 403/429)
+  vinted.ts     # client Vinted (endpoint interne svc-catalogue/items, X-Anon-Id requis, retry sur 403/429)
   db.ts         # SQLite (node:sqlite) : last_alerted_items (top 3 actuel par entrée+source, avec messageId Discord)
   discord.ts    # envoi/suppression webhook (embed stylé : couleur/emoji par rareté, lien cliquable, footer)
   matcher.ts    # filtre langue FR (regex titre + exclusions), 2 modes selon la source
@@ -175,7 +175,7 @@ tests/
   vinted.test.ts             # Browse API Vinted mockée (succès, retry 403/429, retry 5xx), fixtures/vinted-*.json
   scheduler.test.ts          # selectCheapestN, diffAlertedItems, vintedQueries, dedupeByItemId (fonctions pures)
   server.test.ts             # POST /token, GET /status : auth (accepté/refusé), jamais le secret/token dans les logs
-  vintedTokenRefresh.test.ts # extractCookieValue, fetchAnonymousVintedToken et renewVintedTokenAnonymously, fetch mocké
+  vintedTokenRefresh.test.ts # extractCookieValue, fetchAnonymousVintedSession (token + anonId) et renewVintedTokenAnonymously, fetch mocké
   fixtures/*.json            # jeux de données des tests
 ```
 
@@ -185,9 +185,11 @@ du fichier s'exécutent dans un ordre précis (échec OAuth → succès + mise e
 du cache → expiration simulée et renouvellement) — voir le commentaire en tête du fichier.
 `vinted.test.ts` vérifie en plus : le retry sur 403/429 avec log `console.warn` explicite, la
 récupération après une erreur 5xx transitoire, l'envoi du cookie `access_token_web` quand il est
-configuré, l'avertissement proactif quand ce cookie est déjà expiré (JWT décodé), et le log clair
-quand Vinted répond `401` (session invalide) — le tout via `searchVinted(..., accessTokenWeb)`
-qui accepte le token en paramètre explicite pour rester testable sans dépendre de `config.ts`.
+configuré, l'avertissement proactif quand ce cookie est déjà expiré (JWT décodé), le log clair
+quand Vinted répond `401` (session invalide), l'envoi de l'en-tête `X-Anon-Id` (et l'avertissement
+clair en son absence, voir cas réel diagnostiqué plus haut), et la conversion d'une URL
+d'annonce relative en URL absolue — le tout via `searchVinted(..., accessTokenWeb, anonId)` qui
+accepte les deux en paramètres explicites pour rester testable sans dépendre de `tokenStore.ts`.
 
 Tests écrits avec le test runner intégré à Node (`node:test` + `node:assert`), pas de dépendance
 supplémentaire. `npm test` les lance via `tsx --test`.
@@ -266,10 +268,11 @@ plus bas) :
 
 ## Serveur d'admin (renouvellement du token à distance)
 
-Le cookie Vinted (`VINTED_ACCESS_TOKEN_WEB`) expire toutes les ~2h (voir section "Vinted").
-Sur un serveur tournant 24/7 (VPS, Oracle Cloud...), y retourner en SSH à chaque expiration
-est vite pénible. Le serveur d'admin (`server.ts`) expose deux routes HTTP minimalistes
-(`node:http`, aucune dépendance) pour le faire depuis un téléphone ou un PC, n'importe où.
+Le cookie Vinted (`VINTED_ACCESS_TOKEN_WEB`) expire au bout de ~24h (voir section "Vinted") —
+en pratique déjà couvert par le renouvellement automatique (`vintedTokenRefresh.ts`, voir section
+dédiée plus bas), mais utile en secours si celui-ci échoue. Le serveur d'admin (`server.ts`)
+expose deux routes HTTP minimalistes (`node:http`, aucune dépendance) pour renouveler le token à
+la main depuis un téléphone ou un PC, sans SSH, n'importe où.
 
 **Désactivé par défaut** : il ne démarre que si `ADMIN_SECRET` est défini dans `.env` (sinon
 `index.ts` logge `serveur admin désactivé` et n'ouvre aucun port). Génère un secret fort et
