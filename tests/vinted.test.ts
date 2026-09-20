@@ -72,8 +72,8 @@ test("searchVinted - construit la requête avec les bons paramètres et mappe la
     // Pas de catalog_ids : vérifié empiriquement que ce paramètre fait ignorer search_text
     // par l'API Vinted réelle (voir commentaire dans src/vinted.ts).
     assert.equal(requestUrl.searchParams.has("catalog_ids"), false);
-    assert.equal(requestUrl.searchParams.get("order"), "newest_first");
-    assert.equal(requestUrl.searchParams.get("per_page"), "50");
+    assert.equal(requestUrl.searchParams.has("order"), false);
+    assert.equal(requestUrl.searchParams.get("per_page"), "96");
 
     const headers = calls[0].init!.headers as Record<string, string>;
     assert.match(headers["User-Agent"], /Mozilla/);

@@ -13,7 +13,7 @@ export type LanguageFilterMode = "strict" | "assume-french";
 // Mots-clés qui indiquent explicitement une langue étrangère -> exclusion immédiate,
 // quel que soit le mode.
 const FOREIGN_LANGUAGE_PATTERN =
-  /\b(english|en anglais|jap(an|on)?ese?|japon(ais)?e?|jp\b|korean|coréen|german|allemand|deutsch|italian|italien(ne)?|italiano|carta|completo|spanish|espagnol|español|chinese|chinois|dutch|néerlandais|portuguese|portugais)\b/i;
+  /\b(english|en anglais|jap(an|on)?ese?|japon(ais)?e?|jp\b|korean|coréen|german|allemand|deutsch|italian|italien(ne)?|italiano|inglese|englisch|karte|carta|condizioni|bellissim[ao]|spedizione|collezione|completo|spanish|espagnol|español|chinese|chinois|dutch|néerlandais|portuguese|portugais)\b/i;
 
 // Abréviations de langue isolées (tags de marketplace, ex: "Charkos EN 🇬🇧").
 // "ENG"/"GB"/"UK"/"ITA" n'ont pas d'équivalent courant en français -> vérifiées insensibles
@@ -96,8 +96,13 @@ export function isReverseStampedEntry(entryName: string): boolean {
   return REVERSE_STAMPED_ENTRY_PATTERN.test(entryName);
 }
 
+// Mention niée juste avant le mot-clé ("non holo/reverse", "holo (pas reverse)", "sans stamp") :
+// ne compte pas comme un marqueur (cas réel : la description dit précisément que la carte n'est
+// PAS reverse). Fenêtre courte entre la négation et le mot-clé pour ne pas trop élargir.
+const NEGATED_MARKER_PATTERN = /\b(pas|non|sans|no|not)\b[^.\n]{0,15}?\b(reverse|revers|stamp(ed)?|tampon(ne|nee)?)\b/gi;
+
 export function hasReverseStampMarker(text: string): boolean {
-  return REVERSE_STAMP_MARKER_PATTERN.test(stripAccents(text));
+  return REVERSE_STAMP_MARKER_PATTERN.test(stripAccents(text).replace(NEGATED_MARKER_PATTERN, " "));
 }
 
 // Filtre "produit scellé" : rejette une annonce dont le titre indique explicitement que le

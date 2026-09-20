@@ -113,6 +113,12 @@ export function diffAlertedItems(current: Candidate[], previous: AlertedItem[] |
   };
 }
 
+function titleMentionsCardName(title: string, entryName: string): boolean {
+  const normalize = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const cardName = normalize(entryName).split(/\s+/)[0];
+  return normalize(title).includes(cardName);
+}
+
 // Filtre langue (+ produit scellé le cas échéant) sur TOUS les résultats d'une source pour
 // un cycle : le top N se recalcule à chaque cycle sur l'ensemble des résultats, sans dédup
 // par item individuel (voir alertCheapestForSource pour la logique anti-spam au niveau du
@@ -146,6 +152,10 @@ export function filterFrenchMatches(
     // description (voir alertCheapestForSource). Ailleurs (eBay), le titre seul fait foi.
     if (requireReverse && source !== "vinted" && !hasReverseStampMarker(item.title)) continue;
 
+    // Même numéro de carte dans un autre set (ex: "Coconfort reverse 6/108" XY Évolutions pour
+    // Dracaufeu 6/108) : pour ces entrées, le nom du Pokémon doit figurer dans le titre.
+    if (requireReverse && !titleMentionsCardName(item.title, entryName)) continue;
+
     // Les itemId sont propres à chaque marketplace : on les préfixe par source pour éviter
     // qu'un id Vinted et un id eBay identiques ne soient confondus dans le top 3 stocké.
     matches.push({ source, itemKey: `${source}:${item.itemId}`, item, reason });
@@ -156,6 +166,7 @@ export function filterFrenchMatches(
 // Description de chaque annonce Vinted, gardée en mémoire : une description ne change pas d'un
 // cycle à l'autre, inutile de recharger la page toutes les 10 minutes. Seules les lectures
 // réussies sont mises en cache (un échec réseau sera retenté au cycle suivant).
+const DESCRIPTION_FETCH_PAUSE_MS = 400;
 const descriptionCache = new Map<string, string | null>();
 
 async function getDescription(item: MarketplaceItem): Promise<{ ok: true; text: string | null } | { ok: false }> {
@@ -163,6 +174,9 @@ async function getDescription(item: MarketplaceItem): Promise<{ ok: true; text: 
   try {
     const text = await fetchVintedDescription(item.url);
     descriptionCache.set(item.itemId, text);
+    // Pause entre deux lectures de page réellement effectuées (pas depuis le cache) : évite le
+    // blocage 429 de Vinted quand un premier cycle doit lire des dizaines de descriptions.
+    await new Promise((resolve) => setTimeout(resolve, DESCRIPTION_FETCH_PAUSE_MS));
     return { ok: true, text };
   } catch (err) {
     console.warn(`[scheduler] lecture description Vinted impossible pour ${item.itemId}:`, err);

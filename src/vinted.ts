@@ -240,7 +240,7 @@ const MISSING_ANON_ID_WARNING =
 // process.
 export async function searchVinted(
   query: string,
-  limit = 50,
+  limit = 96,
   retries = 3,
   delayMsBase = 1500,
   accessTokenWeb: string | null = getVintedAccessToken(),
@@ -268,7 +268,10 @@ export async function searchVinted(
   // boosters" retournent toutes des résultats pertinents sans catalog_ids).
   const url = new URL(SEARCH_URL);
   url.searchParams.set("search_text", query);
-  url.searchParams.set("order", "newest_first");
+  // Pas de order=newest_first : sur une carte populaire (des centaines d'annonces), les 96
+  // plus récentes ne couvrent que quelques jours et ratent des annonces pourtant actives
+  // (constaté : des annonces vieilles de quelques semaines n'apparaissaient jamais). Le tri par
+  // pertinence par défaut de Vinted les remonte ; 96 = per_page maximal accepté.
   url.searchParams.set("per_page", String(limit));
 
   const res = await fetchWithRetry(
@@ -338,7 +341,8 @@ export async function fetchVintedDescription(
   if (accessTokenWeb) headers.Cookie = `access_token_web=${accessTokenWeb}`;
   if (anonId) headers["X-Anon-Id"] = anonId;
 
-  const res = await fetchWithRetry(itemUrl, { headers }, 2, 1000);
+  // 403/429 retentés aussi (blocage anti-bot temporaire quand plusieurs pages sont lues d'affilée).
+  const res = await fetchWithRetry(itemUrl, { headers }, 3, 1500, (status) => status >= 500 || isBlockedStatus(status));
   if (!res.ok) throw new Error(`Vinted page annonce a échoué: ${res.status}`);
   return extractItemDescription(await res.text());
 }

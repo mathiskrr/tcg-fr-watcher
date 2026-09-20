@@ -361,7 +361,11 @@
     "set": "Créateurs de Légendes",
     "tag": "Recherche Louis",
     "ebayQuery": "Ectoplasma 5/92 Createurs de Legendes reverse stamped carte française",
-    "vintedQuery": "Ectoplasma 5/92 Createurs de Legendes reverse stamped",
+    "vintedQuery": [
+      "Ectoplasma 5/92",
+      "Ectoplasma 5/92 stamp",
+      "Ectoplasma 5/92 reverse"
+    ],
     "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/EX-Legend-Maker/Gengar-LM5"
   },
   {
@@ -369,7 +373,11 @@
     "set": "Gardiens du Pouvoir",
     "tag": "Recherche Louis",
     "ebayQuery": "Dracaufeu 6/108 Gardiens du Pouvoir reverse stamped carte française",
-    "vintedQuery": "Dracaufeu 6/108 Gardiens du Pouvoir reverse stamped",
+    "vintedQuery": [
+      "Dracaufeu 6/108",
+      "Dracaufeu 6/108 stamp",
+      "Dracaufeu 6/108 reverse"
+    ],
     "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/EX-Power-Keepers/Charizard-PK6"
   },
   {
@@ -377,7 +385,11 @@
     "set": "EX Deoxys",
     "tag": "Recherche Louis",
     "ebayQuery": "Deoxys 17/107 EX Deoxys reverse stamped carte française",
-    "vintedQuery": "Deoxys 17/107 EX Deoxys reverse stamped",
+    "vintedQuery": [
+      "Deoxys 17/107",
+      "Deoxys 17/107 stamp",
+      "Deoxys 17/107 reverse"
+    ],
     "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/EX-Deoxys/Deoxys-DX17"
   },
   {
@@ -385,7 +397,11 @@
     "set": "EX Émeraude",
     "tag": "Recherche Louis",
     "ebayQuery": "Rayquaza 9/106 EX Emeraude reverse stamped carte française",
-    "vintedQuery": "Rayquaza 9/106 EX Emeraude reverse stamped",
+    "vintedQuery": [
+      "Rayquaza 9/106",
+      "Rayquaza 9/106 stamp",
+      "Rayquaza 9/106 reverse"
+    ],
     "cardmarketUrl": "https://www.cardmarket.com/fr/Pokemon/Products/Singles/EX-Emerald/Rayquaza-EM9"
   }
 ]

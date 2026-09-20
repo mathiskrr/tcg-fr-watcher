@@ -327,3 +327,9 @@ test("filterFrenchMatches - entrée Reverse stamped : titre sans mention écart�
   assert.deepEqual(filterFrenchMatches("ebay", "strict", items.map((i) => ({ ...i, title: i.title + " VF" })), "Dracaufeu 6/108 (Reverse stamped)").map((c) => c.item.itemId), ["1"]);
   assert.deepEqual(filterFrenchMatches("vinted", "assume-french", items, "Dracaufeu 6/108 (Reverse stamped)").map((c) => c.item.itemId), ["1", "2"]);
 });
+
+test("filterFrenchMatches - entrée Reverse stamped : écarte une autre carte de même numéro (mauvais Pokémon)", () => {
+  const items = [makeItem("1", "Dracaufeu reverse 6/108"), makeItem("2", "Carte Pokémon coconfort reverse 6/108 xy evolution")];
+  const result = filterFrenchMatches("vinted", "assume-french", items, "Dracaufeu 6/108 (Reverse stamped)");
+  assert.deepEqual(result.map((c) => c.item.itemId), ["1"]);
+});

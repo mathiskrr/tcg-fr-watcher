@@ -210,3 +210,13 @@ test("hasReverseStampMarker - variantes de vocabulaire (tamponné, titre doré)"
   assert.equal(hasReverseStampMarker("Ectoplasma titre en or"), true);
   assert.equal(hasReverseStampMarker("Ectoplasma holo 5/92 état neuf"), false);
 });
+
+test("hasReverseStampMarker - mention niée ne compte pas", () => {
+  assert.equal(hasReverseStampMarker("bon état, bloc ex deoxys, non holo/reverse"), false);
+  assert.equal(hasReverseStampMarker("Édition : bloc EX, holo (pas reverse)."), false);
+  assert.equal(hasReverseStampMarker("Version reverse holo avec stamp Deoxys"), true);
+});
+
+test("isForeignLanguageDescription - description italienne sans mot 'carta'", () => {
+  assert.equal(isForeignLanguageDescription("Condizioni molto buone a parte un piccolo difetto"), true);
+});
