@@ -166,7 +166,9 @@ export function filterFrenchMatches(
 // Description de chaque annonce Vinted, gardée en mémoire : une description ne change pas d'un
 // cycle à l'autre, inutile de recharger la page toutes les 10 minutes. Seules les lectures
 // réussies sont mises en cache (un échec réseau sera retenté au cycle suivant).
-const DESCRIPTION_FETCH_PAUSE_MS = 400;
+const DESCRIPTION_FETCH_PAUSE_MS = 800;
+// Après un échec (429 = Vinted freine), on laisse retomber la pression avant la lecture suivante.
+const DESCRIPTION_FETCH_FAILURE_COOLDOWN_MS = 8000;
 const descriptionCache = new Map<string, string | null>();
 
 async function getDescription(item: MarketplaceItem): Promise<{ ok: true; text: string | null } | { ok: false }> {
@@ -179,7 +181,11 @@ async function getDescription(item: MarketplaceItem): Promise<{ ok: true; text: 
     await new Promise((resolve) => setTimeout(resolve, DESCRIPTION_FETCH_PAUSE_MS));
     return { ok: true, text };
   } catch (err) {
-    console.warn(`[scheduler] lecture description Vinted impossible pour ${item.itemId}:`, err);
+    // Message court sans stack : un 429 passager (retenté au prochain cycle) n'est pas une anomalie.
+    console.warn(
+      `[scheduler] lecture description Vinted impossible pour ${item.itemId} (${err instanceof Error ? err.message : err}) -- retentée au prochain cycle`
+    );
+    await new Promise((resolve) => setTimeout(resolve, DESCRIPTION_FETCH_FAILURE_COOLDOWN_MS));
     return { ok: false };
   }
 }
