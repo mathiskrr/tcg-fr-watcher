@@ -13,7 +13,7 @@ export type LanguageFilterMode = "strict" | "assume-french";
 // Mots-clés qui indiquent explicitement une langue étrangère -> exclusion immédiate,
 // quel que soit le mode.
 const FOREIGN_LANGUAGE_PATTERN =
-  /\b(english|en anglais|jap(an|on)?ese?|japon(ais)?e?|jp\b|korean|coréen|german|allemand|deutsch|italian|italien(ne)?|italiano|inglese|englisch|karte|carta|condizioni|bellissim[ao]|spedizione|collezione|completo|spanish|espagnol|español|chinese|chinois|dutch|néerlandais|portuguese|portugais)\b/i;
+  /\b(english|en anglais|jap(an|on)?ese?|japon(ais)?e?|jp\b|korean|coréen|german|allemand|deutsch|italian|italien(ne)?|italiano|inglese|englisch|karte|carta|condizioni|bellissim[ao]|spedizione|collezione|vendo|nuov[ao]|originale|ottim[ei]|perfett[ei]|buio\s+pesto|pitch\s+black|anniversario|celebrazioni|completo|spanish|espagnol|español|chinese|chinois|dutch|néerlandais|portuguese|portugais)\b/i;
 
 // Abréviations de langue isolées (tags de marketplace, ex: "Charkos EN 🇬🇧").
 // "ENG"/"GB"/"UK"/"ITA" n'ont pas d'équivalent courant en français -> vérifiées insensibles

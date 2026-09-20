@@ -228,3 +228,9 @@ test("hasReverseStampMarker - 'holo' compte dans un titre, pas dans une descript
   assert.equal(hasReverseStampMarker("Ectoplasma 5/92", true), false);
   assert.equal(hasReverseStampMarker("Ectoplasma Holo Rare 5/92"), false);
 });
+
+test("isForeignLanguageDescription - nom de set italien (Buio Pesto) ou anglais (Pitch Black) sans autre mot", () => {
+  assert.equal(isForeignLanguageDescription("Morpeko ex PBL 117/084, Buio Pesto"), true);
+  assert.equal(isForeignLanguageDescription("Morpeko ex 117/084 Pitch Black"), true);
+  assert.equal(isForeignLanguageDescription("Morpeko ex 117/084 Nuit Noire, neuve"), false);
+});
