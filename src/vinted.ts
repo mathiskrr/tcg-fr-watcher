@@ -313,3 +313,32 @@ function absoluteItemUrl(url: string | undefined, itemId: number): string {
   if (!url) return `https://www.vinted.fr/items/${itemId}`;
   return url.startsWith("/") ? `https://www.vinted.fr${url}` : url;
 }
+
+// Le endpoint de recherche ne renvoie pas la description : on la lit dans le HTML de la page de
+// l'annonce, qui l'embarque en JSON ("description":"..."). Retourne null si absente/illisible
+// (format de page changé, annonce supprimée...) : l'appelant traite alors l'annonce comme
+// "pas de mention détectée" plutôt que de la rejeter.
+export function extractItemDescription(html: string): string | null {
+  const match = html.match(/"description":("(?:[^"\\]|\\.)*")/);
+  if (!match) return null;
+  try {
+    const value = JSON.parse(match[1]);
+    return typeof value === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchVintedDescription(
+  itemUrl: string,
+  accessTokenWeb: string | null = getVintedAccessToken(),
+  anonId: string | null = getVintedAnonId()
+): Promise<string | null> {
+  const headers: Record<string, string> = { ...BROWSER_HEADERS, Accept: "text/html" };
+  if (accessTokenWeb) headers.Cookie = `access_token_web=${accessTokenWeb}`;
+  if (anonId) headers["X-Anon-Id"] = anonId;
+
+  const res = await fetchWithRetry(itemUrl, { headers }, 2, 1000);
+  if (!res.ok) throw new Error(`Vinted page annonce a échoué: ${res.status}`);
+  return extractItemDescription(await res.text());
+}

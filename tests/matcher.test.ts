@@ -9,6 +9,9 @@ import {
   isSealedProductEntry,
   isClassicCollectionEntry,
   hasThirtyYearMarker,
+  isForeignLanguageDescription,
+  isReverseStampedEntry,
+  hasReverseStampMarker,
 } from "../src/matcher.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -178,4 +181,25 @@ test("hasThirtyYearMarker - rejette les titres de la carte vintage d'origine (ca
 test("hasThirtyYearMarker - un nombre en 30 dans un autre contexte ne déclenche pas de faux positif", () => {
   assert.equal(hasThirtyYearMarker("Lot de 30 cartes Pokémon en parfait état"), false);
   assert.equal(hasThirtyYearMarker("Carte Pokémon 130/132 holo"), false);
+});
+
+test("isForeignLanguageDescription - détecte une langue étrangère dans la description", () => {
+  assert.equal(isForeignLanguageDescription("Carte en italien, très bon état"), true);
+  assert.equal(isForeignLanguageDescription("Carta italiana Ectoplasma"), true);
+  assert.equal(isForeignLanguageDescription("Version anglaise (English)"), true);
+  assert.equal(isForeignLanguageDescription("Carte japonaise 🇯🇵"), true);
+});
+
+test("isForeignLanguageDescription - description française ou sans mention -> pas rejetée", () => {
+  assert.equal(isForeignLanguageDescription("Sortis de booster 10/10! Envoie rapide et avec soins"), false);
+  assert.equal(isForeignLanguageDescription("Carte française en parfait état, envoi soigné"), false);
+  assert.equal(isForeignLanguageDescription(""), false);
+});
+
+test("hasReverseStampMarker / isReverseStampedEntry", () => {
+  assert.equal(isReverseStampedEntry("Dracaufeu 6/108 (Reverse stamped)"), true);
+  assert.equal(isReverseStampedEntry("Dracaufeu 6/108 (CC)"), false);
+  assert.equal(hasReverseStampMarker("Dracaufeu 6/108 Reverse holo"), true);
+  assert.equal(hasReverseStampMarker("Carte avec tampon logo Pokémon"), true);
+  assert.equal(hasReverseStampMarker("Dracaufeu 6/108 holo"), false);
 });

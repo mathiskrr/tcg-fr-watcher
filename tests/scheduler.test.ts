@@ -4,6 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   selectCheapestN,
+  selectCheapestNWhere,
   diffAlertedItems,
   vintedQueries,
   dedupeByItemId,
@@ -303,4 +304,26 @@ test("filterFrenchMatches - entrée hors Collection Classique : aucun marqueur 3
   const matches = filterFrenchMatches("vinted", "assume-french", items, "Lokhlass 131/128 (AR)");
 
   assert.equal(matches.length, 2);
+});
+
+test("selectCheapestNWhere - écarte les exclus sans leur laisser de place dans le top N", async () => {
+  const items = [makeCandidate("a", 5), makeCandidate("b", 10), makeCandidate("c", 20), makeCandidate("d", 30)];
+  const result = await selectCheapestNWhere(items, 2, async (c) => c.item.itemId === "a");
+  assert.deepEqual(result.map((c) => c.item.itemId), ["b", "c"]);
+});
+
+test("selectCheapestNWhere - ne teste pas plus d'annonces que nécessaire", async () => {
+  const items = [makeCandidate("a", 5), makeCandidate("b", 10), makeCandidate("c", 20)];
+  const checked: string[] = [];
+  await selectCheapestNWhere(items, 1, async (c) => {
+    checked.push(c.item.itemId);
+    return false;
+  });
+  assert.deepEqual(checked, ["a"]);
+});
+
+test("filterFrenchMatches - entrée Reverse stamped : titre sans mention écarté sur eBay, gardé pour contrôle description sur Vinted", () => {
+  const items = [makeItem("1", "Dracaufeu 6/108 reverse stamped"), makeItem("2", "Dracaufeu 6/108 holo")];
+  assert.deepEqual(filterFrenchMatches("ebay", "strict", items.map((i) => ({ ...i, title: i.title + " VF" })), "Dracaufeu 6/108 (Reverse stamped)").map((c) => c.item.itemId), ["1"]);
+  assert.deepEqual(filterFrenchMatches("vinted", "assume-french", items, "Dracaufeu 6/108 (Reverse stamped)").map((c) => c.item.itemId), ["1", "2"]);
 });

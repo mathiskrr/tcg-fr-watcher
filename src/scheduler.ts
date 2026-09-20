@@ -2,13 +2,16 @@ import { readFileSync } from "node:fs";
 import cron from "node-cron";
 import { config } from "./config.js";
 import { searchEbay } from "./ebay.js";
-import { searchVinted } from "./vinted.js";
+import { searchVinted, fetchVintedDescription } from "./vinted.js";
 import {
   isFrenchTitle,
+  isForeignLanguageDescription,
   isSealed,
   isSealedProductEntry,
   isClassicCollectionEntry,
   hasThirtyYearMarker,
+  isReverseStampedEntry,
+  hasReverseStampMarker,
   type LanguageFilterMode,
 } from "./matcher.js";
 import { getLastAlertedItems, setLastAlertedItems, type AlertedItem } from "./db.js";
@@ -122,6 +125,7 @@ export function filterFrenchMatches(
 ): Candidate[] {
   const requireSealed = isSealedProductEntry(entryName);
   const requireThirtyYear = isClassicCollectionEntry(entryName);
+  const requireReverse = isReverseStampedEntry(entryName);
   const matches: Candidate[] = [];
 
   for (const item of items) {
@@ -137,11 +141,74 @@ export function filterFrenchMatches(
     // d'origine -- voir hasThirtyYearMarker dans matcher.ts.
     if (requireThirtyYear && !hasThirtyYearMarker(item.title)) continue;
 
+    // Entrée "Reverse stamped" : sur Vinted, un titre sans mention reverse/stamp peut quand même
+    // être la bonne carte si la description le précise -> la décision est reportée au contrôle de
+    // description (voir alertCheapestForSource). Ailleurs (eBay), le titre seul fait foi.
+    if (requireReverse && source !== "vinted" && !hasReverseStampMarker(item.title)) continue;
+
     // Les itemId sont propres à chaque marketplace : on les préfixe par source pour éviter
     // qu'un id Vinted et un id eBay identiques ne soient confondus dans le top 3 stocké.
     matches.push({ source, itemKey: `${source}:${item.itemId}`, item, reason });
   }
   return matches;
+}
+
+// Description de chaque annonce Vinted, gardée en mémoire : une description ne change pas d'un
+// cycle à l'autre, inutile de recharger la page toutes les 10 minutes. Seules les lectures
+// réussies sont mises en cache (un échec réseau sera retenté au cycle suivant).
+const descriptionCache = new Map<string, string | null>();
+
+async function getDescription(item: MarketplaceItem): Promise<{ ok: true; text: string | null } | { ok: false }> {
+  if (descriptionCache.has(item.itemId)) return { ok: true, text: descriptionCache.get(item.itemId)! };
+  try {
+    const text = await fetchVintedDescription(item.url);
+    descriptionCache.set(item.itemId, text);
+    return { ok: true, text };
+  } catch (err) {
+    console.warn(`[scheduler] lecture description Vinted impossible pour ${item.itemId}:`, err);
+    return { ok: false };
+  }
+}
+
+// Contrôles basés sur la description d'une annonce Vinted (le titre ne dit pas toujours tout) :
+// - langue étrangère mentionnée (ex: "carte italienne") -> écartée ;
+// - entrée "Reverse stamped" : mention reverse/stamp/tampon exigée dans le titre OU la
+//   description, sinon c'est la carte holo normale (même numéro) -> écartée.
+// Page injoignable : l'annonce reste en lice, sauf pour "Reverse stamped" où, faute de pouvoir
+// confirmer, on préfère l'écarter ce cycle-ci (retentée au suivant).
+async function isExcludedByDescription(entry: WatchlistEntry, item: MarketplaceItem): Promise<boolean> {
+  const needsReverse = isReverseStampedEntry(entry.name) && !hasReverseStampMarker(item.title);
+  const description = await getDescription(item);
+
+  if (!description.ok) return needsReverse;
+
+  if (description.text !== null && isForeignLanguageDescription(description.text)) {
+    console.log(`[scheduler] annonce Vinted écartée (description en langue étrangère): "${item.title}"`);
+    return true;
+  }
+  if (needsReverse && !(description.text !== null && hasReverseStampMarker(description.text))) {
+    console.log(`[scheduler] annonce Vinted écartée (pas de mention reverse/stamped): "${item.title}"`);
+    return true;
+  }
+  return false;
+}
+
+// Comme selectCheapestN, mais écarte au passage (par ordre de prix croissant, en s'arrêtant dès
+// n retenues) les annonces rejetées par `isExcluded` -- pour qu'une annonce écartée ne prenne
+// pas une place du top N. Fonction exportée avec le contrôle injecté pour rester testable sans
+// réseau.
+export async function selectCheapestNWhere(
+  items: Candidate[],
+  n: number,
+  isExcluded: (candidate: Candidate) => Promise<boolean>
+): Promise<Candidate[]> {
+  const selected: Candidate[] = [];
+  for (const candidate of selectCheapestN(items, items.length)) {
+    if (selected.length >= n) break;
+    if (await isExcluded(candidate)) continue;
+    selected.push(candidate);
+  }
+  return selected;
 }
 
 // Calcule le top N moins chères pour UNE source et ne touche Discord que pour les items dont
@@ -151,7 +218,12 @@ export function filterFrenchMatches(
 async function alertCheapestForSource(entry: WatchlistEntry, source: string, matches: Candidate[]): Promise<void> {
   if (matches.length === 0) return;
 
-  const cheapest = selectCheapestN(matches, TOP_N_PER_ENTRY);
+  // Vinted : le titre omet souvent la langue alors que la description la précise (ex. carte
+  // italienne) -> contrôle de la description des seules annonces en lice pour le top N.
+  const cheapest =
+    source === "vinted"
+      ? await selectCheapestNWhere(matches, TOP_N_PER_ENTRY, (c) => isExcludedByDescription(entry, c.item))
+      : selectCheapestN(matches, TOP_N_PER_ENTRY);
   const entryKey = `${source}:${entry.name}`;
   const previous = getLastAlertedItems(entryKey);
   const { toDelete, toAdd, toKeep } = diffAlertedItems(cheapest, previous);

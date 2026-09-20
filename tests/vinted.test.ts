@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { searchVinted, decodeJwtExpiry, isRelevantToQuery } from "../src/vinted.js";
+import { searchVinted, decodeJwtExpiry, isRelevantToQuery, extractItemDescription } from "../src/vinted.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -417,4 +417,13 @@ test("searchVinted - log clair et explicite quand Vinted répond 401 (session in
       assert.match(message, /VINTED_ACCESS_TOKEN_WEB/);
     }
   );
+});
+
+test("extractItemDescription - lit la description JSON échappée dans le HTML de la page", () => {
+  const html = String.raw`<script>{"id":1,"description":"Carte \"rare\"\nEnvoi rapide é","other":"x"}</script>`;
+  assert.equal(extractItemDescription(html), 'Carte "rare"\nEnvoi rapide é');
+});
+
+test("extractItemDescription - null si la page ne contient aucune description", () => {
+  assert.equal(extractItemDescription("<html>rien</html>"), null);
 });

@@ -70,6 +70,34 @@ export function isFrenchTitle(title: string, mode: LanguageFilterMode = "strict"
   return { isFrench: false, reason: "aucun indice de langue française dans le titre" };
 }
 
+// Filtre langue appliqué à la DESCRIPTION d'une annonce Vinted (le titre ne mentionne pas
+// toujours la langue, mais la description oui : ex. "carte italienne"). Volontairement plus
+// prudent que isFrenchTitle : on ne rejette que sur une mention explicite d'une langue
+// étrangère (mots-clés, ITA/ENG, drapeaux) ; le tag "EN" en majuscules n'est pas pris en compte
+// ici, trop fréquent dans un texte libre. L'absence de mention n'est jamais un motif de rejet.
+export function isForeignLanguageDescription(description: string): boolean {
+  const normalized = description.normalize("NFC");
+  return (
+    FOREIGN_LANGUAGE_PATTERN.test(normalized) ||
+    FOREIGN_LANGUAGE_ABBREVIATION_PATTERN.test(normalized) ||
+    FOREIGN_FLAG_EMOJI_PATTERN.test(normalized)
+  );
+}
+
+// Entrées watchlist "Reverse stamped" (carte reverse holo à tampon logo, ex: "Dracaufeu 6/108
+// (Reverse stamped)") : la carte a le MÊME numéro que sa version holo/normale, donc le numéro ne
+// suffit pas à les distinguer -> le titre (ou la description) doit mentionner reverse/stamp/tampon.
+const REVERSE_STAMPED_ENTRY_PATTERN = /\breverse\s+stamped\b/i;
+const REVERSE_STAMP_MARKER_PATTERN = /\b(reverse|revers|stamp(ed)?|tampon(ne)?)\b/i;
+
+export function isReverseStampedEntry(entryName: string): boolean {
+  return REVERSE_STAMPED_ENTRY_PATTERN.test(entryName);
+}
+
+export function hasReverseStampMarker(text: string): boolean {
+  return REVERSE_STAMP_MARKER_PATTERN.test(stripAccents(text));
+}
+
 // Filtre "produit scellé" : rejette une annonce dont le titre indique explicitement que le
 // produit a été ouvert ou est incomplet (ex: un display/ETB/booster vendu ouvert pour en
 // sortir les cartes à l'unité), reconditionné/d'occasion (donc pas neuf sous scellé
