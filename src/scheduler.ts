@@ -150,7 +150,7 @@ export function filterFrenchMatches(
     // Entrée "Reverse stamped" : sur Vinted, un titre sans mention reverse/stamp peut quand même
     // être la bonne carte si la description le précise -> la décision est reportée au contrôle de
     // description (voir alertCheapestForSource). Ailleurs (eBay), le titre seul fait foi.
-    if (requireReverse && source !== "vinted" && !hasReverseStampMarker(item.title)) continue;
+    if (requireReverse && source !== "vinted" && !hasReverseStampMarker(item.title, true)) continue;
 
     // Même numéro de carte dans un autre set (ex: "Coconfort reverse 6/108" XY Évolutions pour
     // Dracaufeu 6/108) : pour ces entrées, le nom du Pokémon doit figurer dans le titre.
@@ -197,7 +197,7 @@ async function getDescription(item: MarketplaceItem): Promise<{ ok: true; text: 
 // Page injoignable : l'annonce reste en lice, sauf pour "Reverse stamped" où, faute de pouvoir
 // confirmer, on préfère l'écarter ce cycle-ci (retentée au suivant).
 async function isExcludedByDescription(entry: WatchlistEntry, item: MarketplaceItem): Promise<boolean> {
-  const needsReverse = isReverseStampedEntry(entry.name) && !hasReverseStampMarker(item.title);
+  const needsReverse = isReverseStampedEntry(entry.name) && !hasReverseStampMarker(item.title, true);
   const description = await getDescription(item);
 
   if (!description.ok) return needsReverse;

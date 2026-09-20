@@ -101,8 +101,16 @@ export function isReverseStampedEntry(entryName: string): boolean {
 // PAS reverse). Fenêtre courte entre la négation et le mot-clé pour ne pas trop élargir.
 const NEGATED_MARKER_PATTERN = /\b(pas|non|sans|no|not)\b[^.\n]{0,15}?\b(reverse|revers|stamp(ed)?|tampon(ne|nee)?)\b/gi;
 
-export function hasReverseStampMarker(text: string): boolean {
-  return REVERSE_STAMP_MARKER_PATTERN.test(stripAccents(text).replace(NEGATED_MARKER_PATTERN, " "));
+// "holo" compte aussi, mais seulement dans un TITRE (option titleMode) : les vendeurs y résument la
+// carte ("Ectoplasma Holo 5/92") alors que dans une description "holo" est trop fréquent pour
+// être un signal (ex: "Holo Rare", "holo (pas reverse)").
+const HOLO_TITLE_MARKER_PATTERN = /\b(holo|holographique|holographic)\b/i;
+const NEGATED_HOLO_PATTERN = /\b(pas|non|sans|no|not)\b\s*(de\s+)?(holo|holographique|holographic)\b/gi;
+
+export function hasReverseStampMarker(text: string, titleMode = false): boolean {
+  const cleaned = stripAccents(text).replace(NEGATED_MARKER_PATTERN, " ");
+  if (REVERSE_STAMP_MARKER_PATTERN.test(cleaned)) return true;
+  return titleMode && HOLO_TITLE_MARKER_PATTERN.test(cleaned.replace(NEGATED_HOLO_PATTERN, " "));
 }
 
 // Filtre "produit scellé" : rejette une annonce dont le titre indique explicitement que le

@@ -323,7 +323,7 @@ test("selectCheapestNWhere - ne teste pas plus d'annonces que nécessaire", asyn
 });
 
 test("filterFrenchMatches - entrée Reverse stamped : titre sans mention écarté sur eBay, gardé pour contrôle description sur Vinted", () => {
-  const items = [makeItem("1", "Dracaufeu 6/108 reverse stamped"), makeItem("2", "Dracaufeu 6/108 holo")];
+  const items = [makeItem("1", "Dracaufeu 6/108 reverse stamped"), makeItem("2", "Dracaufeu 6/108 rare")];
   assert.deepEqual(filterFrenchMatches("ebay", "strict", items.map((i) => ({ ...i, title: i.title + " VF" })), "Dracaufeu 6/108 (Reverse stamped)").map((c) => c.item.itemId), ["1"]);
   assert.deepEqual(filterFrenchMatches("vinted", "assume-french", items, "Dracaufeu 6/108 (Reverse stamped)").map((c) => c.item.itemId), ["1", "2"]);
 });

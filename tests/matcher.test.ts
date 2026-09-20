@@ -220,3 +220,11 @@ test("hasReverseStampMarker - mention niée ne compte pas", () => {
 test("isForeignLanguageDescription - description italienne sans mot 'carta'", () => {
   assert.equal(isForeignLanguageDescription("Condizioni molto buone a parte un piccolo difetto"), true);
 });
+
+test("hasReverseStampMarker - 'holo' compte dans un titre, pas dans une description", () => {
+  assert.equal(hasReverseStampMarker("Ectoplasma Holo 5/92", true), true);
+  assert.equal(hasReverseStampMarker("Ectoplasma holographique 5/92", true), true);
+  assert.equal(hasReverseStampMarker("Ectoplasma 5/92 non holo", true), false);
+  assert.equal(hasReverseStampMarker("Ectoplasma 5/92", true), false);
+  assert.equal(hasReverseStampMarker("Ectoplasma Holo Rare 5/92"), false);
+});
