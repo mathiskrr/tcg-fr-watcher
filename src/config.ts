@@ -45,6 +45,9 @@ export const config = {
   ebayAppId: enabledSources.includes("ebay") ? required("EBAY_APP_ID") : process.env.EBAY_APP_ID ?? "",
   ebayCertId: enabledSources.includes("ebay") ? required("EBAY_CERT_ID") : process.env.EBAY_CERT_ID ?? "",
   discordWebhookUrl: required("DISCORD_WEBHOOK_URL"),
+  // Webhook (salon) dédié aux entrées taguées "Recherche Louis" (voir discord.ts). Optionnel :
+  // absent -> ces alertes partent sur le salon principal (discordWebhookUrl).
+  discordWebhookUrlLouis: process.env.DISCORD_WEBHOOK_URL_LOUIS || null,
   cronSchedule: process.env.CRON_SCHEDULE ?? "*/10 * * * *",
   dbPath: process.env.DB_PATH ?? "./data/watcher.sqlite",
   watchlistPath: process.env.WATCHLIST_PATH ?? "./watchlist.json",

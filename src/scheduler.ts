@@ -29,6 +29,8 @@ export interface WatchlistEntry {
   // URL exacte de la fiche produit Cardmarket, renseignée à la main (voir discord.ts
   // AlertContext.cardmarketUrl) -- optionnelle, repli sur une recherche générique si absente.
   cardmarketUrl?: string | null;
+  // Étiquette visible dans l'alerte Discord (voir AlertContext.tag).
+  tag?: string | null;
 }
 
 // Chaque cycle recalcule intégralement les TOP_N_PER_ENTRY annonces FR les moins chères
@@ -166,7 +168,7 @@ async function alertCheapestForSource(entry: WatchlistEntry, source: string, mat
   for (const { itemKey, messageId } of toDelete) {
     console.log(`[scheduler] suppression du message Discord pour ${itemKey} (${source}, sorti du top ${cheapest.length})`);
     try {
-      await deleteListingAlert(messageId);
+      await deleteListingAlert(messageId, entry);
     } catch (err) {
       console.error(`[scheduler] échec suppression Discord pour ${itemKey}:`, err);
     }

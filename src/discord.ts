@@ -13,6 +13,9 @@ export interface AlertContext {
   // recherche par nom ne peut pas la deviner fiablement -- voir cardmarketSearchUrl). Optionnelle
   // : absente/null -> repli sur une recherche Cardmarket générique par nom.
   cardmarketUrl?: string | null;
+  // Étiquette de propriétaire de la recherche (ex. "Recherche Louis") : non affichée dans l'alerte : sert
+  // à choisir le salon (webhookUrlFor) et, si présente dans TAG_STYLES, couleur + emoji. Optionnelle.
+  tag?: string | null;
 }
 
 // Espace les envois vers le webhook Discord pour rester sous sa limite de taux (~5
@@ -118,8 +121,14 @@ function withFranceSellerFilter(url: string): string {
   return parsed.toString();
 }
 
+// Style propre à un tag, prioritaire sur la rareté (voir detectRarityStyle). Les tags absents
+// d'ici (ex. "Recherche Mathis") gardent le style de rareté habituel.
+const TAG_STYLES: Record<string, RarityStyle> = {
+  "Recherche Louis": { color: 0xe74c3c, emojiPrefix: "🎯 " },
+};
+
 function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
-  const { color, emojiPrefix } = detectRarityStyle(entry.name);
+  const { color, emojiPrefix } = (entry.tag && TAG_STYLES[entry.tag]) || detectRarityStyle(entry.name);
 
   return {
     title: `${emojiPrefix}${cleanTitle(item.title)}`,
@@ -154,8 +163,18 @@ function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
 // wait=true : sans ce paramètre, Discord répond 204 (aucun corps) et on n'a aucun moyen de
 // récupérer l'id du message créé -> impossible de le supprimer plus tard si l'annonce sort
 // du top 3 (voir deleteListingAlert / scheduler.ts).
-function postEmbed(embed: ReturnType<typeof buildEmbed>): Promise<Response> {
-  const url = new URL(config.discordWebhookUrl);
+// Salon de destination : webhook dédié pour "Recherche Louis" s'il est configuré, sinon le
+// webhook principal. Doit être identique à l'envoi et à la suppression (un message ne se
+// supprime que via le webhook qui l'a créé).
+function webhookUrlFor(entry: Pick<AlertContext, "tag">): string {
+  if (entry.tag === "Recherche Louis" && config.discordWebhookUrlLouis) {
+    return config.discordWebhookUrlLouis;
+  }
+  return config.discordWebhookUrl;
+}
+
+function postEmbed(embed: ReturnType<typeof buildEmbed>, entry: AlertContext): Promise<Response> {
+  const url = new URL(webhookUrlFor(entry));
   url.searchParams.set("wait", "true");
   return fetchWithRetry(url.toString(), {
     method: "POST",
@@ -189,7 +208,7 @@ export async function sendNewListingAlert(
   await waitForRateLimit(minIntervalMs);
 
   const embed = buildEmbed(item, entry);
-  let res = await postEmbed(embed);
+  let res = await postEmbed(embed, entry);
   let retried = false;
 
   // Rate-limit Discord (429) : on respecte exactement le retry_after qu'il indique
@@ -201,7 +220,7 @@ export async function sendNewListingAlert(
         `[discord] rate limit 429 pour l'item ${item.itemId} — attente de ${retryAfterMs}ms (retry_after indiqué par Discord) avant un unique nouvel essai`
       );
       await new Promise((resolve) => setTimeout(resolve, retryAfterMs));
-      res = await postEmbed(embed);
+      res = await postEmbed(embed, entry);
       retried = true;
     } else {
       console.error(`[discord] 429 reçu pour l'item ${item.itemId} sans retry_after exploitable, abandon`);
@@ -223,10 +242,14 @@ export async function sendNewListingAlert(
 // moins chères, remplacée par une plus intéressante). 404 = déjà supprimé (message effacé à la
 // main, ou salon/webhook recréé entre-temps) -> pas une erreur, on l'ignore silencieusement :
 // le but (le message n'est plus visible) est de toute façon déjà atteint.
-export async function deleteListingAlert(messageId: string, minIntervalMs = DEFAULT_MIN_INTERVAL_MS): Promise<void> {
+export async function deleteListingAlert(
+  messageId: string,
+  entry: Pick<AlertContext, "tag"> = {},
+  minIntervalMs = DEFAULT_MIN_INTERVAL_MS
+): Promise<void> {
   await waitForRateLimit(minIntervalMs);
 
-  const url = new URL(`${config.discordWebhookUrl}/messages/${messageId}`);
+  const url = new URL(`${webhookUrlFor(entry)}/messages/${messageId}`);
   const res = await fetchWithRetry(url.toString(), { method: "DELETE" });
 
   if (!res.ok && res.status !== 404) {

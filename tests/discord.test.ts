@@ -300,7 +300,7 @@ test("deleteListingAlert - envoie une requête DELETE sur l'URL du message", asy
   await withMockedFetch(
     () => new Response(null, { status: 204 }),
     async (calls) => {
-      await deleteListingAlert("1234567890123456789", 1);
+      await deleteListingAlert("1234567890123456789", {}, 1);
 
       assert.equal(calls.length, 1);
       assert.equal(calls[0].method, "DELETE");
@@ -313,7 +313,7 @@ test("deleteListingAlert - un 404 (message déjà supprimé) n'est pas traité c
   await withMockedFetch(
     () => new Response("Unknown Message", { status: 404 }),
     async () => {
-      await assert.doesNotReject(() => deleteListingAlert("1234567890123456789", 1));
+      await assert.doesNotReject(() => deleteListingAlert("1234567890123456789", {}, 1));
     }
   );
 });
@@ -323,7 +323,7 @@ test("deleteListingAlert - une autre erreur HTTP est bien propagée", async () =
     () => new Response("forbidden", { status: 403 }),
     async () => {
       await assert.rejects(
-        () => deleteListingAlert("1234567890123456789", 1),
+        () => deleteListingAlert("1234567890123456789", {}, 1),
         /Suppression webhook Discord échouée: 403/
       );
     }
