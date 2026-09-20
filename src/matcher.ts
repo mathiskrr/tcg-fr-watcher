@@ -86,9 +86,11 @@ export function isForeignLanguageDescription(description: string): boolean {
 
 // Entrées watchlist "Reverse stamped" (carte reverse holo à tampon logo, ex: "Dracaufeu 6/108
 // (Reverse stamped)") : la carte a le MÊME numéro que sa version holo/normale, donc le numéro ne
-// suffit pas à les distinguer -> le titre (ou la description) doit mentionner reverse/stamp/tampon.
+// suffit pas à les distinguer -> le titre (ou la description) doit mentionner reverse/stamp/tampon/titre doré (la version recherchée
+// a le nom en or et un tampon avec le logo de la série en bas à droite de la zone holo).
 const REVERSE_STAMPED_ENTRY_PATTERN = /\breverse\s+stamped\b/i;
-const REVERSE_STAMP_MARKER_PATTERN = /\b(reverse|revers|stamp(ed)?|tampon(ne)?)\b/i;
+const REVERSE_STAMP_MARKER_PATTERN =
+  /\b(reverse|revers|stamp(ed)?|tampon(ne|nee)?|titre\s+(en\s+)?(or|dore)|gold\s+title|gold\s+stamp)\b/i;
 
 export function isReverseStampedEntry(entryName: string): boolean {
   return REVERSE_STAMPED_ENTRY_PATTERN.test(entryName);

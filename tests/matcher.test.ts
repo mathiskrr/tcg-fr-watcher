@@ -203,3 +203,10 @@ test("hasReverseStampMarker / isReverseStampedEntry", () => {
   assert.equal(hasReverseStampMarker("Carte avec tampon logo Pokémon"), true);
   assert.equal(hasReverseStampMarker("Dracaufeu 6/108 holo"), false);
 });
+
+test("hasReverseStampMarker - variantes de vocabulaire (tamponné, titre doré)", () => {
+  assert.equal(hasReverseStampMarker("Carte tamponnée logo série"), true);
+  assert.equal(hasReverseStampMarker("Ectoplasma titre doré holo"), true);
+  assert.equal(hasReverseStampMarker("Ectoplasma titre en or"), true);
+  assert.equal(hasReverseStampMarker("Ectoplasma holo 5/92 état neuf"), false);
+});

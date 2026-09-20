@@ -1,6 +1,6 @@
 import { config } from "./config.js";
 import { fetchWithRetry } from "./http.js";
-import { isSealedProductEntry, isClassicCollectionEntry } from "./matcher.js";
+import { isSealedProductEntry, isClassicCollectionEntry, isReverseStampedEntry } from "./matcher.js";
 import type { MarketplaceItem } from "./types.js";
 
 // Contexte minimal nécessaire à l'embed (nom + set de l'entrée watchlist), sans dépendre du
@@ -121,6 +121,21 @@ function withFranceSellerFilter(url: string): string {
   return parsed.toString();
 }
 
+// Entrées "Reverse stamped" : la fiche Cardmarket liste toutes les versions de la carte -> on
+// pré-filtre sur les exemplaires Reverse (isReverseHolo=Y, l'icône "Reverse" dans la liste des
+// offres) et en français (language=2 : 1 EN, 2 FR, 3 DE, 4 ES, 5 IT), en plus du pays vendeur.
+function withReverseFrenchFilter(url: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set("isReverseHolo", "Y");
+  parsed.searchParams.set("language", "2");
+  return parsed.toString();
+}
+
+function comparisonUrl(entry: AlertContext): string {
+  const base = entry.cardmarketUrl ? withFranceSellerFilter(entry.cardmarketUrl) : cardmarketSearchUrl(entry.name);
+  return isReverseStampedEntry(entry.name) ? withReverseFrenchFilter(base) : base;
+}
+
 // Style propre à un tag, prioritaire sur la rareté (voir detectRarityStyle). Les tags absents
 // d'ici (ex. "Recherche Mathis") gardent le style de rareté habituel.
 const TAG_STYLES: Record<string, RarityStyle> = {
@@ -147,9 +162,7 @@ function buildEmbed(item: MarketplaceItem, entry: AlertContext) {
       // variantes/éditions du même nom, voir cas réel diagnostiqué).
       {
         name: "Comparer",
-        value: `[🔍 Cardmarket](${
-          entry.cardmarketUrl ? withFranceSellerFilter(entry.cardmarketUrl) : cardmarketSearchUrl(entry.name)
-        })`,
+        value: `[🔍 Cardmarket](${comparisonUrl(entry)})`,
         inline: true,
       },
     ],

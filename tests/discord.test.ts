@@ -329,3 +329,24 @@ test("deleteListingAlert - une autre erreur HTTP est bien propagée", async () =
     }
   );
 });
+
+test("sendNewListingAlert - entrée Reverse stamped : lien Cardmarket filtré Reverse + français + vendeurs France", async () => {
+  await withMockedFetch(
+    () => Response.json({ id: "9999999999999999999" }),
+    async (calls) => {
+      const entry: AlertContext = {
+        name: "Dracaufeu 6/108 (Reverse stamped)",
+        set: "Gardiens du Pouvoir",
+        cardmarketUrl: "https://www.cardmarket.com/fr/Pokemon/Products/Singles/EX-Power-Keepers/Charizard-PK6",
+      };
+      await sendNewListingAlert(fixtures[0], entry, 1);
+
+      const field = calls[0].body.embeds[0].fields[2];
+      const url = new URL(field.value.match(/\((.+)\)$/)[1]);
+      assert.equal(url.pathname, "/fr/Pokemon/Products/Singles/EX-Power-Keepers/Charizard-PK6");
+      assert.equal(url.searchParams.get("isReverseHolo"), "Y");
+      assert.equal(url.searchParams.get("language"), "2");
+      assert.equal(url.searchParams.get("sellerCountry"), "12");
+    }
+  );
+});
