@@ -115,7 +115,7 @@ test("sendNewListingAlert - utilise cardmarketUrl tel quel quand renseigné (pri
       const cardmarketField = calls[0].body.embeds[0].fields[2];
       assert.equal(
         cardmarketField.value,
-        "[🔍 Cardmarket](https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Mega-Chandelure-ex-V3-PBL115?sellerCountry=12)"
+        "[🔍 Cardmarket](https://www.cardmarket.com/fr/Pokemon/Products/Singles/Pitch-Black/Mega-Chandelure-ex-V3-PBL115?sellerCountry=12&minCondition=2)"
       );
     }
   );
@@ -347,6 +347,21 @@ test("sendNewListingAlert - entrée Reverse stamped : lien Cardmarket filtré Re
       assert.equal(url.searchParams.get("isReverseHolo"), "Y");
       assert.equal(url.searchParams.get("language"), "2");
       assert.equal(url.searchParams.get("sellerCountry"), "12");
+    }
+  );
+});
+
+test("sendNewListingAlert - carte à l'unité : Near Mint minimum ; produit scellé : pas de filtre d'état", async () => {
+  await withMockedFetch(
+    () => Response.json({ id: "9999999999999999999" }),
+    async (calls) => {
+      await sendNewListingAlert(fixtures[0], { name: "Morpeko-ex 117/084 (SIR)", set: "ME05" }, 1);
+      await sendNewListingAlert(fixtures[0], { name: "ETB Nuit Noire", set: "ME05" }, 1);
+
+      const cardUrl = new URL(calls[0].body.embeds[0].fields[2].value.match(/\((.+)\)$/)[1]);
+      const sealedUrl = new URL(calls[1].body.embeds[0].fields[2].value.match(/\((.+)\)$/)[1]);
+      assert.equal(cardUrl.searchParams.get("minCondition"), "2");
+      assert.equal(sealedUrl.searchParams.has("minCondition"), false);
     }
   );
 });

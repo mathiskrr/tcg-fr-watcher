@@ -131,9 +131,19 @@ function withReverseFrenchFilter(url: string): string {
   return parsed.toString();
 }
 
+// Cartes à l'unité (hors "Reverse stamped") : uniquement Near Mint ou mieux. minCondition=2 :
+// 1 Mint, 2 Near Mint, 3 Excellent, 4 Good... (seuil minimal accepté). Pas appliqué aux produits
+// scellés (pas d'état de carte).
+function withNearMintFilter(url: string): string {
+  const parsed = new URL(url);
+  parsed.searchParams.set("minCondition", "2");
+  return parsed.toString();
+}
+
 function comparisonUrl(entry: AlertContext): string {
   const base = entry.cardmarketUrl ? withFranceSellerFilter(entry.cardmarketUrl) : cardmarketSearchUrl(entry.name);
-  return isReverseStampedEntry(entry.name) ? withReverseFrenchFilter(base) : base;
+  if (isReverseStampedEntry(entry.name)) return withReverseFrenchFilter(base);
+  return isSealedProductEntry(entry.name) ? base : withNearMintFilter(base);
 }
 
 // Style propre à un tag, prioritaire sur la rareté (voir detectRarityStyle). Les tags absents

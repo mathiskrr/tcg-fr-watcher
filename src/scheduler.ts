@@ -166,7 +166,7 @@ export function filterFrenchMatches(
 // Description de chaque annonce Vinted, gardée en mémoire : une description ne change pas d'un
 // cycle à l'autre, inutile de recharger la page toutes les 10 minutes. Seules les lectures
 // réussies sont mises en cache (un échec réseau sera retenté au cycle suivant).
-const DESCRIPTION_FETCH_PAUSE_MS = 800;
+const DESCRIPTION_FETCH_PAUSE_MS = 250;
 // Après un échec (429 = Vinted freine), on laisse retomber la pression avant la lecture suivante.
 const DESCRIPTION_FETCH_FAILURE_COOLDOWN_MS = 8000;
 const descriptionCache = new Map<string, string | null>();
